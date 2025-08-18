@@ -1,0 +1,21 @@
+# 测试用例执行超时配置示例
+
+# 默认配置（1分钟超时）
+case:
+  execution:
+    timeout-minutes: 1
+
+# 快速测试配置（30秒超时）
+# case:
+#   execution:
+#     timeout-minutes: 0.5
+
+# 长时间测试配置（5分钟超时）
+# case:
+#   execution:
+#     timeout-minutes: 5
+
+# 超长测试配置（30分钟超时）
+# case:
+#   execution:
+#     timeout-minutes: 30

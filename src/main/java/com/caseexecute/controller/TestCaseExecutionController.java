@@ -96,17 +96,27 @@ public class TestCaseExecutionController {
     public Result<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
         log.info("查询任务状态 - 任务ID: {}", taskId);
         
-        // TODO: 实现任务状态查询逻辑
-        Map<String, Object> status = new HashMap<>();
-        status.put("taskId", taskId);
-        status.put("status", "RUNNING");
-        status.put("progress", 50);
-        status.put("completedCases", 2);
-        status.put("totalCases", 4);
-        status.put("startTime", System.currentTimeMillis() - 60000);
-        status.put("estimatedEndTime", System.currentTimeMillis() + 60000);
-        
-        return Result.success("查询成功", status);
+        try {
+            // 查询数据库中的执行结果来获取真实状态
+            Map<String, Object> status = new HashMap<>();
+            status.put("taskId", taskId);
+            
+            // TODO: 这里应该查询数据库获取真实的执行状态
+            // 暂时返回一个基本状态
+            status.put("status", "BLOCKED");
+            status.put("progress", 0);
+            status.put("completedCases", 0);
+            status.put("totalCases", 0);
+            status.put("startTime", System.currentTimeMillis());
+            status.put("estimatedEndTime", System.currentTimeMillis() + 300000); // 5分钟后
+            
+            log.info("任务状态查询完成 - 任务ID: {}, 状态: {}", taskId, status.get("status"));
+            return Result.success("查询成功", status);
+            
+        } catch (Exception e) {
+            log.error("查询任务状态失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+            return Result.error("查询任务状态失败: " + e.getMessage());
+        }
     }
     
     /**
@@ -119,13 +129,27 @@ public class TestCaseExecutionController {
     public Result<Map<String, Object>> cancelTask(@PathVariable String taskId) {
         log.info("取消任务执行 - 任务ID: {}", taskId);
         
-        // TODO: 实现任务取消逻辑
-        Map<String, Object> result = new HashMap<>();
-        result.put("taskId", taskId);
-        result.put("status", "CANCELLED");
-        result.put("message", "任务已取消");
-        result.put("timestamp", System.currentTimeMillis());
-        
-        return Result.success("任务取消成功", result);
+        try {
+            boolean cancelled = testCaseExecutionService.cancelTaskExecution(taskId);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("taskId", taskId);
+            
+            if (cancelled) {
+                result.put("status", "CANCELLED");
+                result.put("message", "任务已成功取消");
+                log.info("任务取消成功 - 任务ID: {}", taskId);
+                return Result.success("任务取消成功", result);
+            } else {
+                result.put("status", "NOT_FOUND");
+                result.put("message", "任务不存在或已完成");
+                log.warn("任务不存在或已完成 - 任务ID: {}", taskId);
+                return Result.error("任务不存在或已完成");
+            }
+            
+        } catch (Exception e) {
+            log.error("取消任务失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+            return Result.error("取消任务失败: " + e.getMessage());
+        }
     }
 }

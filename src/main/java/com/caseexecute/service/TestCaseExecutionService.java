@@ -16,4 +16,12 @@ public interface TestCaseExecutionService {
      * @param request 用例执行任务请求
      */
     void processTestCaseExecution(TestCaseExecutionRequest request);
+    
+    /**
+     * 取消任务执行
+     * 
+     * @param taskId 任务ID
+     * @return 是否取消成功
+     */
+    boolean cancelTaskExecution(String taskId);
 }

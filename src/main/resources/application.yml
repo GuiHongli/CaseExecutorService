@@ -90,3 +90,9 @@ file:
     max-size: 100MB
     # 允许的文件类型
     allowed-types: .zip,.xlsx,.xls,.py,.txt
+
+# 用例执行配置
+case:
+  execution:
+    # 单个用例执行超时时长（分钟），默认5分钟
+    timeout-minutes: 5

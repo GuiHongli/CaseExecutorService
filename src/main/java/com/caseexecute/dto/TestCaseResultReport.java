@@ -29,7 +29,7 @@ public class TestCaseResultReport {
     private Integer round;
     
     /**
-     * 执行状态 (SUCCESS/FAILED/TIMEOUT)
+     * 执行状态 (SUCCESS/FAILED/BLOCKED)
      */
     private String status;
     
@@ -54,9 +54,9 @@ public class TestCaseResultReport {
     private LocalDateTime endTime;
     
     /**
-     * 错误信息（如果执行失败）
+     * 失败原因（详细分析）
      */
-    private String errorMessage;
+    private String failureReason;
     
     /**
      * 执行机IP
