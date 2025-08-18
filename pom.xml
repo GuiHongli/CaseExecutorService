@@ -120,6 +120,13 @@
             <artifactId>httpclient</artifactId>
             <version>4.5.14</version>
         </dependency>
+        
+        <!-- HTTP Client MIME -->
+        <dependency>
+            <groupId>org.apache.httpcomponents</groupId>
+            <artifactId>httpmime</artifactId>
+            <version>4.5.14</version>
+        </dependency>
 
         <!-- Spring Boot Configuration Processor -->
         <dependency>

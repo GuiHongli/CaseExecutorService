@@ -1,4 +1,3 @@
-com/caseexecute/util/LogFileReportUtil.class
 com/caseexecute/util/FileDownloadUtil.class
 com/caseexecute/util/PythonExecutorUtil$PythonExecutionResult$Builder.class
 com/caseexecute/common/GlobalExceptionHandler.class

@@ -1,0 +1,116 @@
+/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py:248: DeprecationWarning: unittest.makeSuite() is deprecated and will be removed in Python 3.13. Please use unittest.TestLoader.loadTestsFromTestCase() instead.
+  suite.addTest(unittest.makeSuite(WiFiStabilityTest))
+/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py:249: DeprecationWarning: unittest.makeSuite() is deprecated and will be removed in Python 3.13. Please use unittest.TestLoader.loadTestsFromTestCase() instead.
+  suite.addTest(unittest.makeSuite(WiFiPerformanceTest))
+test_connection_recovery (__main__.WiFiStabilityTest.test_connection_recovery)
+连接恢复测试 ... ok
+test_connection_stability (__main__.WiFiStabilityTest.test_connection_stability)
+监控连接稳定性 ... ok
+test_data_transfer (__main__.WiFiStabilityTest.test_data_transfer)
+进行数据传输测试 ... ok
+test_mock_network_failure (__main__.WiFiStabilityTest.test_mock_network_failure)
+模拟网络失败情况 ... ok
+test_network_switching (__main__.WiFiStabilityTest.test_network_switching)
+测试网络切换 ... ok
+test_signal_strength_monitoring (__main__.WiFiStabilityTest.test_signal_strength_monitoring)
+信号强度监控 ... ok
+test_wifi_connection (__main__.WiFiStabilityTest.test_wifi_connection)
+测试WiFi连接 ... FAIL
+test_latency_test (__main__.WiFiPerformanceTest.test_latency_test)
+延迟测试 ... ok
+test_throughput_test (__main__.WiFiPerformanceTest.test_throughput_test)
+吞吐量测试 ... ok
+
+======================================================================
+FAIL: test_wifi_connection (__main__.WiFiStabilityTest.test_wifi_connection)
+测试WiFi连接
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py", line 94, in test_wifi_connection
+    self.assertNotEqual(ssid, "Unknown", "WiFi连接失败")
+AssertionError: 'Unknown' == 'Unknown' : WiFi连接失败
+
+----------------------------------------------------------------------
+Ran 9 tests in 20.032s
+
+FAILED (failures=1)
+开始WiFi连接稳定性测试
+执行连接恢复测试
+模拟连接中断...
+模拟连接恢复...
+连接恢复测试通过
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+步骤3: 监控连接稳定性
+第1次ping测试: 成功
+第2次ping测试: 成功
+第3次ping测试: 成功
+第4次ping测试: 成功
+第5次ping测试: 超时
+第6次ping测试: 成功
+第7次ping测试: 成功
+第8次ping测试: 成功
+第9次ping测试: 成功
+第10次ping测试: 成功
+连接稳定性: 90.0%
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+步骤2: 进行数据传输测试
+数据传输测试通过
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+执行网络失败模拟测试
+网络失败模拟测试通过
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+步骤4: 测试网络切换
+切换到网络 1: WiFi_Network_1
+切换到网络 2: WiFi_Network_2
+切换到网络 3: WiFi_Network_3
+网络切换测试通过
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+执行信号强度监控测试
+信号强度: -45 dBm
+信号强度: -50 dBm
+信号强度: -55 dBm
+信号强度: -60 dBm
+信号强度: -65 dBm
+信号强度监控测试通过
+WiFi连接稳定性测试完成
+
+开始WiFi连接稳定性测试
+步骤1: 连接到WiFi网络
+步骤1: 连接到WiFi网络
+当前WiFi: Unknown, 信号强度: Unknown
+WiFi连接稳定性测试完成
+
+执行WiFi延迟测试
+执行WiFi吞吐量测试
+
+测试结果汇总:
+运行测试数: 9
+失败数: 1
+错误数: 0
+
+失败的测试:
+- test_wifi_connection (__main__.WiFiStabilityTest.test_wifi_connection): Traceback (most recent call last):
+  File "/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py", line 94, in test_wifi_connection
+    self.assertNotEqual(ssid, "Unknown", "WiFi连接失败")
+AssertionError: 'Unknown' == 'Unknown' : WiFi连接失败
+
+
+测试报告:
+{
+  "test_suite": "WiFi稳定性测试",
+  "total_tests": 9,
+  "failures": 1,
+  "errors": 0,
+  "success_rate": 88.88888888888889,
+  "timestamp": 1755527958.332026
+}

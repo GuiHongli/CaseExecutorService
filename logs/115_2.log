@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_6361290793050337981/scripts/test_network_connection.py", line 11, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'

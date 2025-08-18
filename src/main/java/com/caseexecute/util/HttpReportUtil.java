@@ -1,6 +1,7 @@
 package com.caseexecute.util;
 
 import com.caseexecute.dto.TestCaseResultReport;
+import com.caseexecute.dto.TestCaseLogRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -89,15 +90,34 @@ public class HttpReportUtil {
      */
     public boolean reportTestCaseLog(String logReportUrl, String logContent, String logFileName, 
                                           Long testCaseId, Integer round) {
+        
+        // 构建任务ID
+        String taskId = "TASK_" + System.currentTimeMillis() + "_" + testCaseId + "_" + round;
+        return reportTestCaseLog(logReportUrl, logContent, logFileName, taskId, testCaseId, round);
+    }
+    
+    /**
+     * 上报用例执行日志文件
+     * 
+     * @param logReportUrl 日志上报URL
+     * @param logContent 日志内容
+     * @param logFileName 日志文件名
+     * @param taskId 任务ID
+     * @param testCaseId 用例ID
+     * @param round 轮次
+     * @return 是否上报成功
+     */
+    public boolean reportTestCaseLog(String logReportUrl, String logContent, String logFileName, 
+                                          String taskId, Long testCaseId, Integer round) {
         try {
-            log.info("开始上报用例执行日志 - 用例ID: {}, 轮次: {}", testCaseId, round);
+            log.info("开始上报用例执行日志文件 - 用例ID: {}, 轮次: {}", testCaseId, round);
             
-            // 构建日志上报URL
+            // 构建日志上报URL - 使用文件上传接口
             String fullLogReportUrl = logReportUrl;
-            if (!fullLogReportUrl.endsWith("/")) {
-                fullLogReportUrl += "/";
+            if (fullLogReportUrl.endsWith("/")) {
+                fullLogReportUrl = fullLogReportUrl.substring(0, fullLogReportUrl.length() - 1);
             }
-            fullLogReportUrl += logFileName;
+            fullLogReportUrl += "/upload";
             
             log.info("日志上报URL: {}", fullLogReportUrl);
             log.info("日志文件名: {}", logFileName);
@@ -111,31 +131,57 @@ public class HttpReportUtil {
                 log.info("日志预览: {}", logPreview);
             }
             
+            // 创建临时日志文件
+            java.nio.file.Path tempLogFile = java.nio.file.Files.createTempFile("testcase_log_", ".log");
+            java.nio.file.Files.write(tempLogFile, logContent.getBytes(StandardCharsets.UTF_8));
+            
             try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                // 构建multipart请求
+                org.apache.http.entity.mime.MultipartEntityBuilder builder = org.apache.http.entity.mime.MultipartEntityBuilder.create();
+                builder.setMode(org.apache.http.entity.mime.HttpMultipartMode.BROWSER_COMPATIBLE);
+                
+                // 添加参数
+                builder.addTextBody("taskId", taskId);
+                builder.addTextBody("testCaseId", testCaseId.toString());
+                builder.addTextBody("round", round.toString());
+                
+                // 添加文件
+                builder.addBinaryBody("logFile", 
+                    java.nio.file.Files.readAllBytes(tempLogFile),
+                    org.apache.http.entity.ContentType.create("text/plain"),
+                    logFileName);
+                
+                org.apache.http.HttpEntity multipart = builder.build();
+                
                 HttpPost httpPost = new HttpPost(fullLogReportUrl);
-                httpPost.setHeader("Content-Type", "text/plain");
-                httpPost.setEntity(new StringEntity(logContent, StandardCharsets.UTF_8));
+                httpPost.setEntity(multipart);
+                
+                log.info("日志文件上传请求 - 用例ID: {}, 轮次: {}, 文件大小: {} bytes", 
+                        testCaseId, round, java.nio.file.Files.size(tempLogFile));
                 
                 try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
                     int statusCode = response.getStatusLine().getStatusCode();
                     String responseBody = org.apache.http.util.EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
                     
-                    log.info("日志上报响应 - 用例ID: {}, 轮次: {}, HTTP状态码: {}, 响应体: {}", 
+                    log.info("日志文件上传响应 - 用例ID: {}, 轮次: {}, HTTP状态码: {}, 响应体: {}", 
                             testCaseId, round, statusCode, responseBody);
                     
                     if (statusCode == 200) {
-                        log.info("用例执行日志上报成功 - 用例ID: {}, 轮次: {}", testCaseId, round);
+                        log.info("用例执行日志文件上传成功 - 用例ID: {}, 轮次: {}", testCaseId, round);
                         return true;
                     } else {
-                        log.error("用例执行日志上报失败 - 用例ID: {}, 轮次: {}, HTTP状态码: {}, 响应体: {}", 
+                        log.error("用例执行日志文件上传失败 - 用例ID: {}, 轮次: {}, HTTP状态码: {}, 响应体: {}", 
                                 testCaseId, round, statusCode, responseBody);
                         return false;
                     }
                 }
+            } finally {
+                // 清理临时文件
+                java.nio.file.Files.deleteIfExists(tempLogFile);
             }
             
         } catch (Exception e) {
-            log.error("上报用例执行日志失败 - 用例ID: {}, 轮次: {}, 错误: {}", 
+            log.error("上报用例执行日志文件失败 - 用例ID: {}, 轮次: {}, 错误: {}", 
                     testCaseId, round, e.getMessage(), e);
             return false;
         }

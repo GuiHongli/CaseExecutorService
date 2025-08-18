@@ -67,4 +67,9 @@ public class TestCaseResultReport {
      * 用例集ID
      */
     private Long testCaseSetId;
+    
+    /**
+     * 日志文件路径或HTTP链接
+     */
+    private String logFilePath;
 }

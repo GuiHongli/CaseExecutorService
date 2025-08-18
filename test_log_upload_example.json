@@ -1,0 +1,15 @@
+{
+  "taskId": "LOG_UPLOAD_TEST_001",
+  "executorIp": "localhost",
+  "testCaseSetId": 1,
+  "testCaseSetPath": "http://localhost:8000/upload/test_log_upload.zip",
+  "testCaseList": [
+    {
+      "testCaseId": 1,
+      "testCaseNumber": "TC001",
+      "round": 1
+    }
+  ],
+  "resultReportUrl": "http://localhost:8080/api/test-result/report",
+  "logReportUrl": "http://localhost:8000"
+}

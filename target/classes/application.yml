@@ -96,3 +96,7 @@ case:
   execution:
     # 单个用例执行超时时长（分钟），默认5分钟
     timeout-minutes: 5
+
+# gohttpserver配置
+gohttpserver:
+  url: http://localhost:8081

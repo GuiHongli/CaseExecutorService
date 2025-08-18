@@ -1,0 +1,8 @@
+/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py:248: DeprecationWarning: unittest.makeSuite() is deprecated and will be removed in Python 3.13. Please use unittest.TestLoader.loadTestsFromTestCase() instead.
+  suite.addTest(unittest.makeSuite(WiFiStabilityTest))
+/var/folders/xl/zrhyjt457txb8kffxx2h908r0000gn/T/extract_13681007065834766465/scripts/WiFi_Connection_Stability_Test.py:249: DeprecationWarning: unittest.makeSuite() is deprecated and will be removed in Python 3.13. Please use unittest.TestLoader.loadTestsFromTestCase() instead.
+  suite.addTest(unittest.makeSuite(WiFiPerformanceTest))
+test_connection_recovery (__main__.WiFiStabilityTest.test_connection_recovery)
+连接恢复测试 ... ok
+test_connection_stability (__main__.WiFiStabilityTest.test_connection_stability)
+监控连接稳定性 ... 

@@ -176,7 +176,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                 
                 // 对于未处理的异常，上报为FAILED状态
                 try {
-                    reportTestCaseResult(request, testCase, "FAILED", "执行异常: " + e.getMessage(), 0L, null, null, "执行异常: " + e.getMessage());
+                    reportTestCaseResult(request, testCase, "FAILED", "执行异常: " + e.getMessage(), 0L, null, null, "执行异常: " + e.getMessage(), null);
                 } catch (Exception reportException) {
                     log.error("上报用例执行结果失败 - 用例ID: {}, 错误: {}", testCase.getTestCaseId(), reportException.getMessage());
                 }
@@ -297,7 +297,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         if (testCase.getTestCaseNumber() == null || testCase.getTestCaseNumber().trim().isEmpty()) {
             String failureReason = "用例编号为空，无法查找脚本文件";
             log.error("用例编号为空 - 用例ID: {}, 轮次: {}", testCase.getTestCaseId(), testCase.getRound());
-            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason);
+            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason, null);
             return;
         }
         
@@ -311,7 +311,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), failureReason);
             
             // 上报Blocked状态和失败原因
-            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason);
+            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason, null);
             return;
         }
         
@@ -322,7 +322,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes);
             
             PythonExecutorUtil.PythonExecutionResult executionResult = 
-                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getRound(), timeoutMinutes);
+                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl());
             
             // 解析执行结果和失败原因
             String status = executionResult.getStatus();
@@ -338,16 +338,16 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             log.info("结果上报URL: {}", request.getResultReportUrl());
             
             reportTestCaseResult(request, testCase, analysis.getStatus(), analysis.getResult(), 
-                    executionResult.getExecutionTime(), executionResult.getStartTime(), executionResult.getEndTime(), analysis.getFailureReason());
+                    executionResult.getExecutionTime(), executionResult.getStartTime(), executionResult.getEndTime(), analysis.getFailureReason(), executionResult.getLogFilePath());
             
-            // 上报执行日志
-            log.info("准备上报用例执行日志 - 用例ID: {}, 轮次: {}, 日志文件名: {}, 日志内容长度: {}", 
-                    testCase.getTestCaseId(), testCase.getRound(), executionResult.getLogFileName(), 
-                    executionResult.getLogContent() != null ? executionResult.getLogContent().length() : 0);
-            log.info("日志上报URL: {}", request.getLogReportUrl());
+            // // 上报执行日志
+            // log.info("准备上报用例执行日志 - 用例ID: {}, 轮次: {}, 日志文件路径: {}, 日志内容长度: {}", 
+            //         testCase.getTestCaseId(), testCase.getRound(), executionResult.getLogFilePath(), 
+            //         executionResult.getLogContent() != null ? executionResult.getLogContent().length() : 0);
+            // log.info("日志上报URL: {}", request.getLogReportUrl());
             
-            httpReportUtil.reportTestCaseLog(request.getLogReportUrl(), executionResult.getLogContent(), 
-                    executionResult.getLogFileName(), testCase.getTestCaseId(), testCase.getRound());
+            // httpReportUtil.reportTestCaseLog(request.getLogReportUrl(), executionResult.getLogContent(), 
+            //         executionResult.getLogFilePath(), request.getTaskId(), testCase.getTestCaseId(), testCase.getRound());
             
         } catch (Exception e) {
             String errorMessage = e.getMessage();
@@ -365,7 +365,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             }
             
             // 上报BLOCKED状态和错误原因
-            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason);
+            reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason, null);
         }
     }
     
@@ -525,7 +525,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
     }
     
     /**
-     * 上报用例执行结果（带失败原因）
+     * 上报用例执行结果（带失败原因和日志文件路径）
      */
     private void reportTestCaseResult(TestCaseExecutionRequest request,
                                     TestCaseExecutionRequest.TestCaseInfo testCase,
@@ -534,9 +534,10 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                                     Long executionTime,
                                     java.time.LocalDateTime startTime,
                                     java.time.LocalDateTime endTime,
-                                    String failureReason) {
-        log.info("构建用例执行结果报告 - 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}", 
-                testCase.getTestCaseId(), testCase.getRound(), status, result);
+                                    String failureReason,
+                                    String logFilePath) {
+        log.info("构建用例执行结果报告 - 用例ID: {}, 轮次: {}, 状态: {}, 结果: {}, 日志文件: {}", 
+                testCase.getTestCaseId(), testCase.getRound(), status, result, logFilePath);
         
         TestCaseResultReport report = new TestCaseResultReport();
         report.setTaskId(request.getTaskId());
@@ -549,6 +550,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         report.setEndTime(endTime);
         report.setExecutorIp(request.getExecutorIp());
         report.setTestCaseSetId(request.getTestCaseSetId());
+        report.setLogFilePath(logFilePath);
         
         if ("FAILED".equals(status) || "BLOCKED".equals(status)) {
             report.setFailureReason(failureReason != null ? failureReason : result);
@@ -556,10 +558,24 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     testCase.getTestCaseId(), testCase.getRound(), report.getFailureReason());
         }
         
-        log.info("用例执行结果报告构建完成 - 用例ID: {}, 轮次: {}, 任务ID: {}, 执行机IP: {}", 
-                testCase.getTestCaseId(), testCase.getRound(), request.getTaskId(), request.getExecutorIp());
+        log.info("用例执行结果报告构建完成 - 用例ID: {}, 轮次: {}, 任务ID: {}, 执行机IP: {}, 日志文件: {}", 
+                testCase.getTestCaseId(), testCase.getRound(), request.getTaskId(), request.getExecutorIp(), logFilePath);
         
         httpReportUtil.reportTestCaseResult(request.getResultReportUrl(), report);
+    }
+    
+    /**
+     * 上报用例执行结果（带失败原因）
+     */
+    private void reportTestCaseResult(TestCaseExecutionRequest request,
+                                    TestCaseExecutionRequest.TestCaseInfo testCase,
+                                    String status,
+                                    String result,
+                                    Long executionTime,
+                                    java.time.LocalDateTime startTime,
+                                    java.time.LocalDateTime endTime,
+                                    String failureReason) {
+        reportTestCaseResult(request, testCase, status, result, executionTime, startTime, endTime, failureReason, null);
     }
     
     @Override

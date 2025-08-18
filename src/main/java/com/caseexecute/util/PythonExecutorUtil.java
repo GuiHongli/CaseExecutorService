@@ -28,7 +28,7 @@ public class PythonExecutorUtil {
      * @throws Exception 执行异常
      */
     public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, Integer round) throws Exception {
-        return executePythonScript(scriptPath, testCaseId, round, 5); // 默认5分钟超时
+        return executePythonScript(scriptPath, testCaseId, null, round, 5, null); // 默认5分钟超时，无gohttpserver地址
     }
     
     /**
@@ -36,12 +36,14 @@ public class PythonExecutorUtil {
      * 
      * @param scriptPath 脚本路径
      * @param testCaseId 用例ID
+     * @param testCaseNumber 用例编号
      * @param round 轮次
      * @param timeoutMinutes 超时时间（分钟）
+     * @param goHttpServerUrl gohttpserver地址（可选）
      * @return 执行结果
      * @throws Exception 执行异常
      */
-    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, Integer round, Integer timeoutMinutes) throws Exception {
+    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl) throws Exception {
         log.info("开始执行Python脚本 - 脚本路径: {}, 用例ID: {}, 轮次: {}, 超时时间: {}分钟", 
                 scriptPath, testCaseId, round, timeoutMinutes);
         
@@ -50,17 +52,27 @@ public class PythonExecutorUtil {
             throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
         }
         
-        // 创建日志文件
-        String logFileName = String.format("testcase_%d_round_%d_%s.log", 
-                testCaseId, round, 
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")));
-        Path logFilePath = Files.createTempFile("testcase_log_", ".log");
+        // 创建日志目录
+        String projectDir = System.getProperty("user.dir");
+        Path logsDir = Path.of(projectDir, "logs");
+        if (!Files.exists(logsDir)) {
+            Files.createDirectories(logsDir);
+        }
+        
+        // 创建日志文件路径 - 使用用例编号_轮次.log格式
+        String logFileName;
+        if (testCaseNumber != null && !testCaseNumber.trim().isEmpty()) {
+            logFileName = String.format("%s_%d.log", testCaseNumber, round);
+        } else {
+            // 如果没有用例编号，则使用用例ID
+            logFileName = String.format("%d_%d.log", testCaseId, round);
+        }
+        Path logFilePath = logsDir.resolve(logFileName);
         
         LocalDateTime startTime = LocalDateTime.now();
         long startTimeMillis = System.currentTimeMillis();
         
         // 执行Python脚本 - 优先使用DataCollectService目录下的venv
-        String projectDir = System.getProperty("user.dir");
         String dataCollectServiceDir = projectDir.replace("/CaseExecuteService", "/DataCollectService");
         //String venvPythonPath = dataCollectServiceDir + "/venv/bin/python";
         
@@ -129,11 +141,21 @@ public class PythonExecutorUtil {
             failureReason = analysis.getFailureReason();
         }
         
-        log.info("Python脚本执行完成 - 用例ID: {}, 轮次: {}, 状态: {}, 耗时: {}ms", 
-                testCaseId, round, status, executionTime);
+        log.info("Python脚本执行完成 - 用例ID: {}, 轮次: {}, 状态: {}, 耗时: {}ms, 日志文件: {}",                 testCaseId, round, status, executionTime, logFilePath);
         
-        // 清理日志文件
-        Files.deleteIfExists(logFilePath);
+        // 上传日志文件到gohttpserver（如果提供了gohttpserver地址）
+        String uploadedLogUrl = null;
+        if (goHttpServerUrl != null && !goHttpServerUrl.trim().isEmpty()) {
+            try {
+                GoHttpServerClient goHttpServerClient = new GoHttpServerClient();
+                uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, goHttpServerUrl);
+                log.info("日志文件上传成功 - 用例ID: {}, 轮次: {}, 上传URL: {}", testCaseId, round, uploadedLogUrl);
+            } catch (Exception e) {
+                log.error("日志文件上传失败 - 用例ID: {}, 轮次: {}, 错误: {}", testCaseId, round, e.getMessage());
+            }
+        } else {
+            log.info("未提供gohttpserver地址，跳过日志文件上传 - 用例ID: {}, 轮次: {}", testCaseId, round);
+        }
         
         return PythonExecutionResult.builder()
                 .status(status)
@@ -142,7 +164,7 @@ public class PythonExecutorUtil {
                 .startTime(startTime)
                 .endTime(endTime)
                 .logContent(logContent)
-                .logFileName(logFileName)
+                .logFilePath(uploadedLogUrl != null ? uploadedLogUrl : logFileName)
                 .failureReason(failureReason)
                 .build();
     }
@@ -152,10 +174,12 @@ public class PythonExecutorUtil {
      * 
      * @param scriptPath 脚本路径
      * @param testCaseId 用例ID
+     * @param testCaseNumber 用例编号
      * @param round 轮次
+     * @param goHttpServerUrl gohttpserver地址（可选）
      * @return 进程对象
      */
-    public static Process startPythonProcess(Path scriptPath, Long testCaseId, Integer round) throws Exception {
+    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl) throws Exception {
         log.info("启动Python脚本进程 - 脚本路径: {}, 用例ID: {}, 轮次: {}", 
                 scriptPath, testCaseId, round);
         
@@ -164,8 +188,24 @@ public class PythonExecutorUtil {
             throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
         }
         
-        // 执行Python脚本 - 优先使用DataCollectService目录下的venv
+        // 创建日志目录
         String projectDir = System.getProperty("user.dir");
+        Path logsDir = Path.of(projectDir, "logs");
+        if (!Files.exists(logsDir)) {
+            Files.createDirectories(logsDir);
+        }
+        
+        // 创建日志文件路径 - 使用用例编号_轮次.log格式
+        String logFileName;
+        if (testCaseNumber != null && !testCaseNumber.trim().isEmpty()) {
+            logFileName = String.format("%s_%d.log", testCaseNumber, round);
+        } else {
+            // 如果没有用例编号，则使用用例ID
+            logFileName = String.format("%d_%d.log", testCaseId, round);
+        }
+        Path logFilePath = logsDir.resolve(logFileName);
+        
+        // 执行Python脚本 - 优先使用DataCollectService目录下的venv
         String dataCollectServiceDir = projectDir.replace("/CaseExecuteService", "/DataCollectService");
         
         String pythonCommand = "python3";
@@ -173,12 +213,14 @@ public class PythonExecutorUtil {
         
         ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
         processBuilder.redirectErrorStream(true);
+        processBuilder.redirectOutput(logFilePath.toFile());
         
         // 设置工作目录为DataCollectService目录，这样Python脚本可以访问到venv和相关依赖
         processBuilder.directory(new File(dataCollectServiceDir));
         
         Process process = processBuilder.start();
-        log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, PID: {}", testCaseId, round, process.pid());
+        log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, PID: {}, 日志文件: {}", 
+                testCaseId, round, process.pid(), logFilePath);
         
         return process;
     }
@@ -333,7 +375,7 @@ public class PythonExecutorUtil {
         private LocalDateTime startTime;
         private LocalDateTime endTime;
         private String logContent;
-        private String logFileName;
+        private String logFilePath;
         private String failureReason;
         
         // 使用Builder模式
@@ -374,8 +416,8 @@ public class PythonExecutorUtil {
                 return this;
             }
             
-            public Builder logFileName(String logFileName) {
-                executionResult.logFileName = logFileName;
+            public Builder logFilePath(String logFilePath) {
+                executionResult.logFilePath = logFilePath;
                 return this;
             }
 
@@ -396,7 +438,7 @@ public class PythonExecutorUtil {
         public LocalDateTime getStartTime() { return startTime; }
         public LocalDateTime getEndTime() { return endTime; }
         public String getLogContent() { return logContent; }
-        public String getLogFileName() { return logFileName; }
+        public String getLogFilePath() { return logFilePath; }
         public String getFailureReason() { return failureReason; }
     }
 
