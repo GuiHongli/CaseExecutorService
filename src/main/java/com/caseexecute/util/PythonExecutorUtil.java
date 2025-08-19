@@ -57,18 +57,9 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         return new GoHttpServerClient();
     }
     
-    /**
-     * 执行Python脚本
-     * 
-     * @param scriptPath 脚本路径
-     * @param testCaseId 用例ID
-     * @param round 轮次
-     * @return 执行结果
-     * @throws Exception 执行异常
-     */
-    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, Integer round) throws Exception {
-        return executePythonScript(scriptPath, testCaseId, null, round, 5, null, null); // 默认5分钟超时，无gohttpserver地址，无taskId
-    }
+
+    
+
     
     /**
      * 执行Python脚本（带超时参数）
@@ -80,10 +71,11 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param timeoutMinutes 超时时间（分钟）
      * @param goHttpServerUrl gohttpserver地址（可选）
      * @param taskId 任务ID（可选）
+     * @param executorIp 执行机IP地址
      * @return 执行结果
      * @throws Exception 执行异常
      */
-    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl, String taskId) throws Exception {
+    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl, String taskId, String executorIp) throws Exception {
         log.info("开始执行Python脚本 - 脚本路径: {}, 用例ID: {}, 轮次: {}, 超时时间: {}分钟", 
                 scriptPath, testCaseId, round, timeoutMinutes);
         
@@ -126,8 +118,22 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         String pythonCommand = "python3";
         log.info("使用系统Python3执行器: {}", pythonCommand);
         
-        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
+        log.info("执行机IP地址: {}", executorIp);
+        
+        // 构建命令参数：python3 script_path executor_ip
+        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString(), executorIp);
         processBuilder.redirectErrorStream(true);
+        
+        // 设置环境变量以确保正确的字符编码
+        processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
+        processBuilder.environment().put("LANG", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_ALL", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_CTYPE", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_MESSAGES", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_MONETARY", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_NUMERIC", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_TIME", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_COLLATE", "zh_CN.UTF-8");
         
         Process process = processBuilder.start();
         
@@ -231,9 +237,10 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param round 轮次
      * @param goHttpServerUrl gohttpserver地址（可选）
      * @param taskId 任务ID（可选）
+     * @param executorIp 执行机IP地址
      * @return 进程对象
      */
-    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId) throws Exception {
+    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId, String executorIp) throws Exception {
         log.info("启动Python脚本进程 - 脚本路径: {}, 用例ID: {}, 轮次: {}", 
                 scriptPath, testCaseId, round);
         
@@ -273,9 +280,23 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         String pythonCommand = "python3";
         log.info("使用系统Python3执行器: {}", pythonCommand);
         
-        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
+        log.info("执行机IP地址: {}", executorIp);
+        
+        // 构建命令参数：python3 script_path executor_ip
+        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString(), executorIp);
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(logFilePath.toFile());
+        
+        // 设置环境变量以确保正确的字符编码
+        processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
+        processBuilder.environment().put("LANG", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_ALL", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_CTYPE", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_MESSAGES", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_MONETARY", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_NUMERIC", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_TIME", "zh_CN.UTF-8");
+        processBuilder.environment().put("LC_COLLATE", "zh_CN.UTF-8");
         
         Process process = processBuilder.start();
         log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, 日志文件: {}", 

@@ -320,7 +320,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes);
             
             PythonExecutorUtil.PythonExecutionResult executionResult = 
-                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl(), request.getTaskId());
+                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp());
             
             // 解析执行结果和失败原因
             String status = executionResult.getStatus();

@@ -55,11 +55,26 @@ public class RealTimeLogOutput {
                     // 实时输出到控制台
                     log.info("{} - {}", logPrefix, line);
                     
-                    // 同时写入日志文件
+                    // 同时写入日志文件，确保UTF-8编码
                     synchronized (logWriter) {
-                        logWriter.write(String.format("[%s] %s", timestamp, line));
-                        logWriter.newLine();
-                        logWriter.flush();
+                        try {
+                            // 确保字符串是UTF-8编码
+                            String logLine = String.format("[%s] %s", timestamp, line);
+                            logWriter.write(logLine);
+                            logWriter.newLine();
+                            logWriter.flush();
+                        } catch (Exception e) {
+                            log.error("写入日志文件失败: {}", e.getMessage());
+                            // 尝试使用不同的编码方式
+                            try {
+                                String logLine = String.format("[%s] %s", timestamp, line);
+                                logWriter.write(logLine);
+                                logWriter.newLine();
+                                logWriter.flush();
+                            } catch (Exception e2) {
+                                log.error("重试写入日志文件也失败: {}", e2.getMessage());
+                            }
+                        }
                     }
                 }
             } catch (IOException e) {
