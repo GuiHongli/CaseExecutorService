@@ -1,6 +1,10 @@
 package com.caseexecute.util;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Component;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -9,6 +13,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Python脚本执行工具类
@@ -17,7 +25,28 @@ import java.time.format.DateTimeFormatter;
  * @since 2024-01-01
  */
 @Slf4j
-public class PythonExecutorUtil {
+@Component
+public class PythonExecutorUtil implements ApplicationContextAware {
+    
+    private static ApplicationContext applicationContext;
+    private static final ExecutorService executorService = Executors.newCachedThreadPool();
+    
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        PythonExecutorUtil.applicationContext = applicationContext;
+    }
+    
+    /**
+     * 获取GoHttpServerClient实例
+     */
+    private static GoHttpServerClient getGoHttpServerClient() {
+        if (applicationContext != null) {
+            return applicationContext.getBean(GoHttpServerClient.class);
+        }
+        // 如果无法获取Spring bean，则创建新实例（不推荐，因为无法获取配置）
+        log.warn("无法获取Spring ApplicationContext，创建新的GoHttpServerClient实例");
+        return new GoHttpServerClient();
+    }
     
     /**
      * 执行Python脚本
@@ -92,15 +121,31 @@ public class PythonExecutorUtil {
         
         ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
         processBuilder.redirectErrorStream(true);
-        processBuilder.redirectOutput(logFilePath.toFile());
         
         // 设置工作目录为DataCollectService目录，这样Python脚本可以访问到venv和相关依赖
         processBuilder.directory(new File(dataCollectServiceDir));
         
         Process process = processBuilder.start();
         
-        // 等待执行完成，使用配置的超时时间
-        boolean completed = process.waitFor(timeoutMinutes, java.util.concurrent.TimeUnit.MINUTES);
+        // 声明completed变量
+        boolean completed;
+        
+        // 输出执行开始日志
+        RealTimeLogOutput.logExecutionStart(testCaseId, round, testCaseNumber, scriptPath.toString());
+        
+        // 创建日志文件输出流
+        try (BufferedWriter logWriter = Files.newBufferedWriter(logFilePath, StandardCharsets.UTF_8)) {
+            
+            // 启动实时日志输出
+            Future<?> logOutputFuture = RealTimeLogOutput.startRealTimeLogOutput(
+                    process, logWriter, testCaseId, round, testCaseNumber);
+            
+            // 等待执行完成，使用配置的超时时间
+            completed = process.waitFor(timeoutMinutes, TimeUnit.MINUTES);
+            
+            // 等待日志输出完成
+            RealTimeLogOutput.waitForLogOutput(logOutputFuture, 5);
+        } // 关闭日志文件输出流
         
         LocalDateTime endTime = LocalDateTime.now();
         long endTimeMillis = System.currentTimeMillis();
@@ -122,7 +167,8 @@ public class PythonExecutorUtil {
             // 强制终止进程及其子进程
             terminateProcessAndChildren(process);
             
-            log.warn("用例执行超时 - 用例ID: {}, 轮次: {}, 超时时间: {}分钟", testCaseId, round, timeoutMinutes);
+            RealTimeLogOutput.logError(testCaseId, round, testCaseNumber, 
+                    "用例执行超时: 超过配置的超时时间 " + timeoutMinutes + " 分钟");
         } else if (process.exitValue() != 0) {
             // 检查是否是环境问题导致的阻塞
             if (isBlockedByEnvironment(logContent)) {
@@ -142,7 +188,8 @@ public class PythonExecutorUtil {
             failureReason = analysis.getFailureReason();
         }
         
-        log.info("Python脚本执行完成 - 用例ID: {}, 轮次: {}, 状态: {}, 耗时: {}ms, 日志文件: {}",                 testCaseId, round, status, executionTime, logFilePath);
+        // 输出执行结束日志
+        RealTimeLogOutput.logExecutionEnd(testCaseId, round, testCaseNumber, status, executionTime);
         
         // 上传日志文件到gohttpserver（如果提供了gohttpserver地址）
         String uploadedLogUrl = null;
@@ -152,7 +199,8 @@ public class PythonExecutorUtil {
                 uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, goHttpServerUrl);
                 log.info("日志文件上传成功 - 用例ID: {}, 轮次: {}, 上传URL: {}", testCaseId, round, uploadedLogUrl);
             } catch (Exception e) {
-                log.error("日志文件上传失败 - 用例ID: {}, 轮次: {}, 错误: {}", testCaseId, round, e.getMessage());
+                RealTimeLogOutput.logError(testCaseId, round, testCaseNumber, 
+                        "日志文件上传失败: " + e.getMessage());
             }
         } else {
             log.info("未提供gohttpserver地址，跳过日志文件上传 - 用例ID: {}, 轮次: {}", testCaseId, round);

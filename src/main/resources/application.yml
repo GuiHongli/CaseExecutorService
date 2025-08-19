@@ -30,6 +30,18 @@ case:
   execution:
     # 单个用例执行超时时长（分钟），默认5分钟
     timeout-minutes: 5
+    # 日志输出配置
+    log:
+      # 是否启用实时日志输出到控制台
+      enable-real-time-console-output: true
+      # 是否启用日志文件输出
+      enable-file-output: true
+      # 日志输出级别过滤（INFO, DEBUG, WARN, ERROR）
+      log-level: INFO
+      # 是否显示时间戳
+      show-timestamp: true
+      # 是否显示用例信息前缀
+      show-test-case-prefix: true
 
 # gohttpserver配置
 gohttpserver:
