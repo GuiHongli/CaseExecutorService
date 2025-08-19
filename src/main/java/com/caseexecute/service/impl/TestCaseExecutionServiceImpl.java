@@ -72,9 +72,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                         if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
                             process.destroyForcibly();
                         }
-                        log.info("已终止进程 - 任务ID: {}, PID: {}", taskId, process.pid());
+                        log.info("已终止进程 - 任务ID: {}", taskId);
                     } catch (Exception e) {
-                        log.error("终止进程失败 - 任务ID: {}, PID: {}, 错误: {}", taskId, process.pid(), e.getMessage());
+                        log.error("终止进程失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage());
                     }
                 }
             }

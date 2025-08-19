@@ -6,6 +6,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -54,7 +55,7 @@ public class PythonExecutorUtil {
         
         // 创建日志目录
         String projectDir = System.getProperty("user.dir");
-        Path logsDir = Path.of(projectDir, "logs");
+        Path logsDir = Paths.get(projectDir, "logs");
         if (!Files.exists(logsDir)) {
             Files.createDirectories(logsDir);
         }
@@ -190,7 +191,7 @@ public class PythonExecutorUtil {
         
         // 创建日志目录
         String projectDir = System.getProperty("user.dir");
-        Path logsDir = Path.of(projectDir, "logs");
+        Path logsDir = Paths.get(projectDir, "logs");
         if (!Files.exists(logsDir)) {
             Files.createDirectories(logsDir);
         }
@@ -219,8 +220,8 @@ public class PythonExecutorUtil {
         processBuilder.directory(new File(dataCollectServiceDir));
         
         Process process = processBuilder.start();
-        log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, PID: {}, 日志文件: {}", 
-                testCaseId, round, process.pid(), logFilePath);
+        log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, 日志文件: {}", 
+                testCaseId, round, logFilePath);
         
         return process;
     }
@@ -236,14 +237,12 @@ public class PythonExecutorUtil {
         }
         
         try {
-            // 获取进程ID
-            long pid = process.pid();
-            log.info("开始终止进程及其子进程 - PID: {}", pid);
+            log.info("开始终止进程及其子进程");
             
             // 在macOS/Linux系统上，使用pkill命令终止进程树
             if (System.getProperty("os.name").toLowerCase().contains("mac") || 
                 System.getProperty("os.name").toLowerCase().contains("linux")) {
-                terminateProcessTreeUnix(pid);
+                terminateProcessTreeUnix(process);
             } else {
                 // Windows系统或其他系统，使用Java API
                 terminateProcessJava(process);
@@ -259,23 +258,15 @@ public class PythonExecutorUtil {
     /**
      * 在Unix系统上终止进程树
      * 
-     * @param pid 进程ID
+     * @param process 进程对象
      */
-    private static void terminateProcessTreeUnix(long pid) {
+    private static void terminateProcessTreeUnix(Process process) {
         try {
-            // 使用pkill命令终止进程树
-            ProcessBuilder pb = new ProcessBuilder("pkill", "-P", String.valueOf(pid));
-            Process pkillProcess = pb.start();
-            pkillProcess.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            
-            // 终止主进程
-            pb = new ProcessBuilder("kill", "-9", String.valueOf(pid));
-            Process killProcess = pb.start();
-            killProcess.waitFor(5, java.util.concurrent.TimeUnit.SECONDS);
-            
-            log.info("已终止进程树 - PID: {}", pid);
+            // 在Java 8中，我们无法直接获取进程ID，所以直接使用Java API终止进程
+            terminateProcessJava(process);
+            log.info("已终止进程树");
         } catch (Exception e) {
-            log.error("终止进程树失败 - PID: {}, 错误: {}", pid, e.getMessage());
+            log.error("终止进程树失败 - 错误: {}", e.getMessage());
         }
     }
     

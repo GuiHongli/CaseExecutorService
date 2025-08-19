@@ -3,13 +3,17 @@ package com.caseexecute.util;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
+import java.nio.file.Paths;
+import java.util.concurrent.TimeUnit;
+import org.apache.http.HttpEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 
 /**
  * GoHttpServer客户端工具类
@@ -20,11 +24,16 @@ import java.time.Duration;
 @Slf4j
 public class GoHttpServerClient {
 
-    private final HttpClient httpClient;
+    private final CloseableHttpClient httpClient;
 
     public GoHttpServerClient() {
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
+        this.httpClient = HttpClients.custom()
+                .setDefaultRequestConfig(
+                    org.apache.http.client.config.RequestConfig.custom()
+                        .setConnectTimeout(30000)
+                        .setSocketTimeout(60000)
+                        .build()
+                )
                 .build();
     }
 
@@ -39,7 +48,7 @@ public class GoHttpServerClient {
         log.info("开始上传本地文件到gohttpserver: {} -> {}, 服务器地址: {}", localFilePath, targetFileName, goHttpServerUrl);
         
         try {
-            Path sourcePath = Path.of(localFilePath);
+            Path sourcePath = Paths.get(localFilePath);
             if (!Files.exists(sourcePath)) {
                 throw new IOException("源文件不存在: " + localFilePath);
             }
@@ -55,21 +64,25 @@ public class GoHttpServerClient {
             byte[] multipartBody = buildMultipartBody(fileBytes, targetFileName, boundary);
             
             // 发送HTTP请求
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(uploadUrl))
-                    .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(multipartBody))
-                    .timeout(Duration.ofSeconds(60))
-                    .build();
+            HttpPost request = new HttpPost(uploadUrl);
+            request.setHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+            request.setEntity(new ByteArrayEntity(multipartBody));
             
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            CloseableHttpResponse response = httpClient.execute(request);
             
-            if (response.statusCode() == 200 || response.statusCode() == 201) {
-                String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
-                log.info("本地文件上传成功: {}", fileUrl);
-                return fileUrl;
-            } else {
-                throw new IOException("上传失败，HTTP状态码: " + response.statusCode() + ", 响应: " + response.body());
+            try {
+                int statusCode = response.getStatusLine().getStatusCode();
+                String responseBody = EntityUtils.toString(response.getEntity());
+                
+                if (statusCode == 200 || statusCode == 201) {
+                    String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
+                    log.info("本地文件上传成功: {}", fileUrl);
+                    return fileUrl;
+                } else {
+                    throw new IOException("上传失败，HTTP状态码: " + statusCode + ", 响应: " + responseBody);
+                }
+            } finally {
+                response.close();
             }
             
         } catch (Exception e) {
