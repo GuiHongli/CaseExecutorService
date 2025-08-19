@@ -107,13 +107,13 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             try {
                 log.info("开始下载用例集文件 - 任务ID: {}, URL: {}", request.getTaskId(), request.getTestCaseSetPath());
                 
-                // 1. 下载用例集文件
-                zipFilePath = FileDownloadUtil.downloadFile(request.getTestCaseSetPath());
+                // 1. 下载用例集文件到/opt目录下的taskId子目录
+                zipFilePath = FileDownloadUtil.downloadFile(request.getTestCaseSetPath(), request.getTaskId());
                 log.info("用例集文件下载完成 - 任务ID: {}, 文件路径: {}", request.getTaskId(), zipFilePath);
                 
-                // 2. 解压用例集到临时目录
+                // 2. 解压用例集到/opt目录下的taskId子目录
                 log.info("开始解压用例集文件 - 任务ID: {}, 文件路径: {}", request.getTaskId(), zipFilePath);
-                extractPath = FileDownloadUtil.extractZipFile(zipFilePath);
+                extractPath = FileDownloadUtil.extractZipFile(zipFilePath, request.getTaskId());
                 log.info("用例集文件解压完成 - 任务ID: {}, 解压路径: {}", request.getTaskId(), extractPath);
                 
                 // 3. 执行用例列表
@@ -125,17 +125,15 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             } catch (Exception e) {
                 log.error("用例执行任务处理失败 - 任务ID: {}, 错误: {}", request.getTaskId(), e.getMessage(), e);
             } finally {
-                // 4. 清理临时文件
-                log.info("开始清理临时文件 - 任务ID: {}", request.getTaskId());
-                if (zipFilePath != null) {
-                    FileDownloadUtil.cleanupFile(zipFilePath);
-                    log.info("临时ZIP文件已清理 - 任务ID: {}, 文件路径: {}", request.getTaskId(), zipFilePath);
+                // 4. 清理任务目录
+                log.info("开始清理任务目录 - 任务ID: {}", request.getTaskId());
+                try {
+                    FileDownloadUtil.cleanupTaskDirectory(request.getTaskId());
+                    log.info("任务目录已清理 - 任务ID: {}", request.getTaskId());
+                } catch (Exception e) {
+                    log.warn("清理任务目录失败 - 任务ID: {}, 错误: {}", request.getTaskId(), e.getMessage());
                 }
-                if (extractPath != null) {
-                    FileDownloadUtil.cleanupFile(extractPath);
-                    log.info("临时解压目录已清理 - 任务ID: {}, 目录路径: {}", request.getTaskId(), extractPath);
-                }
-                log.info("临时文件清理完成 - 任务ID: {}", request.getTaskId());
+                log.info("任务目录清理完成 - 任务ID: {}", request.getTaskId());
                 
                 // 5. 从运行任务列表中移除
                 runningTasks.remove(request.getTaskId());
@@ -322,7 +320,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes);
             
             PythonExecutorUtil.PythonExecutionResult executionResult = 
-                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl());
+                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl(), request.getTaskId());
             
             // 解析执行结果和失败原因
             String status = executionResult.getStatus();

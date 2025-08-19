@@ -42,6 +42,18 @@ case:
       show-timestamp: true
       # 是否显示用例信息前缀
       show-test-case-prefix: true
+    # 文件存储配置
+    file-storage:
+      # 文件存储根目录
+      root-directory: /opt
+      # 是否在任务完成后自动清理文件
+      auto-cleanup: true
+      # 文件保留时间（小时），超过此时间自动清理
+      retention-hours: 24
+      # 最大并发任务数
+      max-concurrent-tasks: 10
+      # 单个任务最大文件大小（MB）
+      max-file-size-mb: 1000
 
 # gohttpserver配置
 gohttpserver:

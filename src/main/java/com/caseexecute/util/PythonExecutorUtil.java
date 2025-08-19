@@ -1,5 +1,6 @@
 package com.caseexecute.util;
 
+import com.caseexecute.config.FileStorageConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
@@ -29,11 +30,19 @@ import java.util.concurrent.TimeUnit;
 public class PythonExecutorUtil implements ApplicationContextAware {
     
     private static ApplicationContext applicationContext;
+    private static FileStorageConfig fileStorageConfig;
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
     
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         PythonExecutorUtil.applicationContext = applicationContext;
+    }
+    
+    /**
+     * 设置文件存储配置
+     */
+    public static void setFileStorageConfig(FileStorageConfig config) {
+        PythonExecutorUtil.fileStorageConfig = config;
     }
     
     /**
@@ -58,7 +67,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @throws Exception 执行异常
      */
     public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, Integer round) throws Exception {
-        return executePythonScript(scriptPath, testCaseId, null, round, 5, null); // 默认5分钟超时，无gohttpserver地址
+        return executePythonScript(scriptPath, testCaseId, null, round, 5, null, null); // 默认5分钟超时，无gohttpserver地址，无taskId
     }
     
     /**
@@ -70,10 +79,11 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param round 轮次
      * @param timeoutMinutes 超时时间（分钟）
      * @param goHttpServerUrl gohttpserver地址（可选）
+     * @param taskId 任务ID（可选）
      * @return 执行结果
      * @throws Exception 执行异常
      */
-    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl) throws Exception {
+    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl, String taskId) throws Exception {
         log.info("开始执行Python脚本 - 脚本路径: {}, 用例ID: {}, 轮次: {}, 超时时间: {}分钟", 
                 scriptPath, testCaseId, round, timeoutMinutes);
         
@@ -82,9 +92,19 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
         }
         
-        // 创建日志目录
-        String projectDir = System.getProperty("user.dir");
-        Path logsDir = Paths.get(projectDir, "logs");
+        // 创建日志目录 - 使用/opt/taskid/logs路径
+        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+        Path rootDirectory = Paths.get(rootDir);
+        Path taskDir = rootDirectory.resolve(taskId);
+        Path logsDir = taskDir.resolve("logs");
+        
+        // 确保目录存在
+        if (!Files.exists(rootDirectory)) {
+            Files.createDirectories(rootDirectory);
+        }
+        if (!Files.exists(taskDir)) {
+            Files.createDirectories(taskDir);
+        }
         if (!Files.exists(logsDir)) {
             Files.createDirectories(logsDir);
         }
@@ -102,28 +122,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         LocalDateTime startTime = LocalDateTime.now();
         long startTimeMillis = System.currentTimeMillis();
         
-        // 执行Python脚本 - 优先使用DataCollectService目录下的venv
-        String dataCollectServiceDir = projectDir.replace("/CaseExecuteService", "/DataCollectService");
-        //String venvPythonPath = dataCollectServiceDir + "/venv/bin/python";
-        
-        // 检查DataCollectService的venv中的Python是否存在
-        //File venvPython = new File(venvPythonPath);
-        String pythonCommand;
-        
-        //if (venvPython.exists()) {
-        //    pythonCommand = venvPythonPath;
-        //    log.info("使用DataCollectService venv中的Python执行器: {}", pythonCommand);
-        //} else {
-            // 尝试使用系统Python3
-            pythonCommand = "python3";
-            log.info("使用系统Python3执行器: {}", pythonCommand);
-        //}
+        // 执行Python脚本 - 直接使用系统python3命令
+        String pythonCommand = "python3";
+        log.info("使用系统Python3执行器: {}", pythonCommand);
         
         ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
         processBuilder.redirectErrorStream(true);
-        
-        // 设置工作目录为DataCollectService目录，这样Python脚本可以访问到venv和相关依赖
-        processBuilder.directory(new File(dataCollectServiceDir));
         
         Process process = processBuilder.start();
         
@@ -226,9 +230,10 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param testCaseNumber 用例编号
      * @param round 轮次
      * @param goHttpServerUrl gohttpserver地址（可选）
+     * @param taskId 任务ID（可选）
      * @return 进程对象
      */
-    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl) throws Exception {
+    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId) throws Exception {
         log.info("启动Python脚本进程 - 脚本路径: {}, 用例ID: {}, 轮次: {}", 
                 scriptPath, testCaseId, round);
         
@@ -237,9 +242,19 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
         }
         
-        // 创建日志目录
-        String projectDir = System.getProperty("user.dir");
-        Path logsDir = Paths.get(projectDir, "logs");
+        // 创建日志目录 - 使用/opt/taskid/logs路径
+        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+        Path rootDirectory = Paths.get(rootDir);
+        Path taskDir = rootDirectory.resolve(taskId);
+        Path logsDir = taskDir.resolve("logs");
+        
+        // 确保目录存在
+        if (!Files.exists(rootDirectory)) {
+            Files.createDirectories(rootDirectory);
+        }
+        if (!Files.exists(taskDir)) {
+            Files.createDirectories(taskDir);
+        }
         if (!Files.exists(logsDir)) {
             Files.createDirectories(logsDir);
         }
@@ -254,18 +269,13 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         }
         Path logFilePath = logsDir.resolve(logFileName);
         
-        // 执行Python脚本 - 优先使用DataCollectService目录下的venv
-        String dataCollectServiceDir = projectDir.replace("/CaseExecuteService", "/DataCollectService");
-        
+        // 执行Python脚本 - 直接使用系统python3命令
         String pythonCommand = "python3";
         log.info("使用系统Python3执行器: {}", pythonCommand);
         
         ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString());
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(logFilePath.toFile());
-        
-        // 设置工作目录为DataCollectService目录，这样Python脚本可以访问到venv和相关依赖
-        processBuilder.directory(new File(dataCollectServiceDir));
         
         Process process = processBuilder.start();
         log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, 日志文件: {}", 
