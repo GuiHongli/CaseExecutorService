@@ -42,9 +42,10 @@ public class GoHttpServerClient {
      * @param localFilePath 本地文件路径
      * @param targetFileName 目标文件名
      * @param goHttpServerUrl gohttpserver地址
+     * @param taskId 任务ID（可选）
      * @return 上传后的文件URL
      */
-    public String uploadLocalFile(String localFilePath, String targetFileName, String goHttpServerUrl) throws IOException {
+    public String uploadLocalFile(String localFilePath, String targetFileName, String goHttpServerUrl, String taskId) throws IOException {
         log.info("开始上传本地文件到gohttpserver: {} -> {}, 服务器地址: {}", localFilePath, targetFileName, goHttpServerUrl);
         
         try {
@@ -53,8 +54,13 @@ public class GoHttpServerClient {
                 throw new IOException("源文件不存在: " + localFilePath);
             }
             
-            // 构建上传URL，使用gohttpserver的标准上传接口
-            String uploadUrl = goHttpServerUrl + "/upload";
+            // 构建上传URL，使用gohttpserver的标准上传接口，拼上taskId目录
+            String uploadUrl;
+            if (taskId != null && !taskId.trim().isEmpty()) {
+                uploadUrl = goHttpServerUrl + "/upload/" + taskId;
+            } else {
+                uploadUrl = goHttpServerUrl + "/upload";
+            }
             
             // 读取文件内容
             byte[] fileBytes = Files.readAllBytes(sourcePath);
@@ -75,7 +81,12 @@ public class GoHttpServerClient {
                 String responseBody = EntityUtils.toString(response.getEntity());
                 
                 if (statusCode == 200 || statusCode == 201) {
-                    String fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
+                    String fileUrl;
+                    if (taskId != null && !taskId.trim().isEmpty()) {
+                        fileUrl = goHttpServerUrl + "/upload/" + taskId + "/" + targetFileName;
+                    } else {
+                        fileUrl = goHttpServerUrl + "/upload/" + targetFileName;
+                    }
                     log.info("本地文件上传成功: {}", fileUrl);
                     return fileUrl;
                 } else {
@@ -89,6 +100,17 @@ public class GoHttpServerClient {
             log.error("上传本地文件到gohttpserver失败: {}", e.getMessage());
             throw new IOException("上传本地文件失败: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * 上传本地文件到gohttpserver（兼容旧版本）
+     * @param localFilePath 本地文件路径
+     * @param targetFileName 目标文件名
+     * @param goHttpServerUrl gohttpserver地址
+     * @return 上传后的文件URL
+     */
+    public String uploadLocalFile(String localFilePath, String targetFileName, String goHttpServerUrl) throws IOException {
+        return uploadLocalFile(localFilePath, targetFileName, goHttpServerUrl, null);
     }
 
     /**

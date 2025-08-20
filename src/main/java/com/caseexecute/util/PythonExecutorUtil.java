@@ -206,7 +206,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         if (goHttpServerUrl != null && !goHttpServerUrl.trim().isEmpty()) {
             try {
                 GoHttpServerClient goHttpServerClient = new GoHttpServerClient();
-                uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, goHttpServerUrl);
+                uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, goHttpServerUrl, taskId);
                 log.info("日志文件上传成功 - 用例ID: {}, 轮次: {}, 上传URL: {}", testCaseId, round, uploadedLogUrl);
             } catch (Exception e) {
                 RealTimeLogOutput.logError(testCaseId, round, testCaseNumber, 
