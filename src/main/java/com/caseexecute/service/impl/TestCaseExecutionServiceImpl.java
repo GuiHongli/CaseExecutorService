@@ -47,7 +47,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
     private static class TaskExecutionInfo {
         private final String taskId;
         private final List<Process> processes;
-        private final CompletableFuture<Void> executionFuture;
+        private CompletableFuture<Void> executionFuture;
         private final LocalDateTime startTime;
         
         public TaskExecutionInfo(String taskId, CompletableFuture<Void> executionFuture) {
@@ -55,6 +55,10 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             this.processes = new ArrayList<>();
             this.executionFuture = executionFuture;
             this.startTime = LocalDateTime.now();
+        }
+        
+        public void setExecutionFuture(CompletableFuture<Void> executionFuture) {
+            this.executionFuture = executionFuture;
         }
         
         public void addProcess(Process process) {
@@ -101,6 +105,11 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
     public void processTestCaseExecution(TestCaseExecutionRequest request) {
         log.info("开始处理用例执行任务 - 任务ID: {}", request.getTaskId());
         
+        // 先创建任务执行信息并存储，确保在异步执行开始前就可用
+        TaskExecutionInfo taskInfo = new TaskExecutionInfo(request.getTaskId(), null);
+        runningTasks.put(request.getTaskId(), taskInfo);
+        log.info("任务已添加到运行列表 - 任务ID: {}", request.getTaskId());
+        
         // 异步执行，避免阻塞接口响应
         CompletableFuture<Void> executionFuture = CompletableFuture.runAsync(() -> {
             Path zipFilePath = null;
@@ -143,10 +152,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             }
         });
         
-        // 创建任务执行信息并存储
-        TaskExecutionInfo taskInfo = new TaskExecutionInfo(request.getTaskId(), executionFuture);
-        runningTasks.put(request.getTaskId(), taskInfo);
-        log.info("任务已添加到运行列表 - 任务ID: {}", request.getTaskId());
+        // 更新任务执行信息中的Future
+        taskInfo.setExecutionFuture(executionFuture);
+        log.info("任务执行Future已设置 - 任务ID: {}", request.getTaskId());
     }
     
     /**
@@ -157,8 +165,36 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         
         int successCount = 0;
         int failedCount = 0;
+        int cancelledCount = 0;
         
         for (TestCaseExecutionRequest.TestCaseInfo testCase : request.getTestCaseList()) {
+            // 检查任务是否已被取消
+            TaskExecutionInfo taskInfo = runningTasks.get(request.getTaskId());
+            if (taskInfo == null) {
+                log.warn("任务已被取消，停止执行剩余用例 - 任务ID: {}", request.getTaskId());
+                cancelledCount++;
+                // 上报被取消的用例状态
+                try {
+                    reportTestCaseResult(request, testCase, "BLOCKED", "用例执行被取消", 0L, null, null, "任务被用户取消", null);
+                } catch (Exception reportException) {
+                    log.error("上报用例取消状态失败 - 用例ID: {}, 错误: {}", testCase.getTestCaseId(), reportException.getMessage());
+                }
+                continue;
+            }
+            
+            // 检查执行Future是否已被取消
+            if (taskInfo.getExecutionFuture() != null && taskInfo.getExecutionFuture().isCancelled()) {
+                log.warn("任务执行已被取消，停止执行剩余用例 - 任务ID: {}", request.getTaskId());
+                cancelledCount++;
+                // 上报被取消的用例状态
+                try {
+                    reportTestCaseResult(request, testCase, "BLOCKED", "用例执行被取消", 0L, null, null, "任务被用户取消", null);
+                } catch (Exception reportException) {
+                    log.error("上报用例取消状态失败 - 用例ID: {}, 错误: {}", testCase.getTestCaseId(), reportException.getMessage());
+                }
+                continue;
+            }
+            
             try {
                 log.info("开始执行用例 - 用例ID: {}, 用例编号: {}, 轮次: {}", 
                         testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound());
@@ -183,8 +219,8 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             }
         }
         
-        log.info("用例列表执行完成 - 成功: {}, 失败: {}, 总计: {}", 
-                successCount, failedCount, request.getTestCaseList().size());
+        log.info("用例列表执行完成 - 成功: {}, 失败: {}, 取消: {}, 总计: {}", 
+                successCount, failedCount, cancelledCount, request.getTestCaseList().size());
     }
     
     /**
@@ -342,8 +378,34 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                         request.getTaskId(), testCase.getTestCaseId(), testCase.getRound());
             }
             
-            // 等待进程完成，使用配置的超时时间
-            boolean completed = process.waitFor(timeoutMinutes, java.util.concurrent.TimeUnit.MINUTES);
+            // 等待进程完成，使用配置的超时时间，同时检查任务是否被取消
+            boolean completed = false;
+            long startTime = System.currentTimeMillis();
+            long timeoutMillis = timeoutMinutes * 60 * 1000L;
+            
+            while (!completed && (System.currentTimeMillis() - startTime) < timeoutMillis) {
+                // 检查任务是否被取消
+                if (taskInfo != null && taskInfo.getExecutionFuture() != null && taskInfo.getExecutionFuture().isCancelled()) {
+                    log.warn("任务已被取消，终止正在执行的用例 - 任务ID: {}, 用例ID: {}", 
+                            request.getTaskId(), testCase.getTestCaseId());
+                    // 强制终止进程
+                    if (process != null && process.isAlive()) {
+                        process.destroy();
+                        if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                            process.destroyForcibly();
+                        }
+                        log.info("已强制终止被取消任务的进程 - 任务ID: {}, 用例ID: {}", 
+                                request.getTaskId(), testCase.getTestCaseId());
+                    }
+                    // 上报取消状态
+                    reportTestCaseResult(request, testCase, "BLOCKED", "用例执行被取消", 
+                            System.currentTimeMillis() - startTime, null, null, "任务被用户取消", null);
+                    return;
+                }
+                
+                // 等待进程完成，每次检查间隔1秒
+                completed = process.waitFor(1, java.util.concurrent.TimeUnit.SECONDS);
+            }
             
             // 从任务管理中移除进程
             if (taskInfo != null) {
