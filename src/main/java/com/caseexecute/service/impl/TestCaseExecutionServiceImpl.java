@@ -13,12 +13,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * 用例执行服务实现类
@@ -300,10 +302,13 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         }
         
         String scriptFileName = testCase.getTestCaseNumber() + ".py";
-        Path scriptPath = extractPath.resolve("scripts").resolve(scriptFileName);
+        Path scriptsDir = extractPath.resolve("scripts");
         
-        if (!java.nio.file.Files.exists(scriptPath)) {
-            String failureReason = "Python脚本文件不存在: scripts/" + scriptFileName + " (用例编号: " + testCase.getTestCaseNumber() + ")";
+        // 递归查找脚本文件
+        Path scriptPath = findScriptFileRecursively(scriptsDir, scriptFileName);
+        
+        if (scriptPath == null) {
+            String failureReason = "Python脚本文件不存在: 在scripts目录及其子目录中未找到 " + scriptFileName + " (用例编号: " + testCase.getTestCaseNumber() + ")";
             
             log.error("脚本文件不存在 - 用例ID: {}, 用例编号: {}, 轮次: {}, 错误: {}", 
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), failureReason);
@@ -312,6 +317,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             reportTestCaseResult(request, testCase, "BLOCKED", "用例执行失败", 0L, null, null, failureReason, null);
             return;
         }
+        
+        log.info("找到脚本文件 - 用例ID: {}, 用例编号: {}, 脚本路径: {}", 
+                testCase.getTestCaseId(), testCase.getTestCaseNumber(), scriptPath);
         
         try {
             // 执行Python脚本，使用配置的超时时间
@@ -602,6 +610,32 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         } catch (Exception e) {
             log.error("取消任务失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
             return false;
+        }
+    }
+    
+    /**
+     * 递归查找脚本文件
+     * 
+     * @param scriptsDir scripts目录路径
+     * @param scriptFileName 脚本文件名
+     * @return 找到的脚本文件路径，如果未找到则返回null
+     */
+    private Path findScriptFileRecursively(Path scriptsDir, String scriptFileName) {
+        if (!Files.exists(scriptsDir) || !Files.isDirectory(scriptsDir)) {
+            log.warn("scripts目录不存在或不是目录: {}", scriptsDir);
+            return null;
+        }
+        
+        try (Stream<Path> paths = Files.walk(scriptsDir)) {
+            return paths
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals(scriptFileName))
+                    .findFirst()
+                    .orElse(null);
+        } catch (Exception e) {
+            log.error("递归查找脚本文件时发生错误 - 目录: {}, 文件名: {}, 错误: {}", 
+                    scriptsDir, scriptFileName, e.getMessage());
+            return null;
         }
     }
 }
