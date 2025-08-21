@@ -327,8 +327,33 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             log.info("使用配置的超时时间执行用例 - 用例ID: {}, 用例编号: {}, 轮次: {}, 超时时间: {}分钟", 
                     testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes);
             
-            PythonExecutorUtil.PythonExecutionResult executionResult = 
-                    PythonExecutorUtil.executePythonScript(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), timeoutMinutes, request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp());
+            // 获取当前任务的执行信息
+            TaskExecutionInfo taskInfo = runningTasks.get(request.getTaskId());
+            if (taskInfo == null) {
+                log.warn("任务执行信息不存在，无法管理进程 - 任务ID: {}", request.getTaskId());
+            }
+            
+            // 启动Python进程并添加到任务管理
+            Process process = PythonExecutorUtil.startPythonProcess(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp());
+            
+            if (taskInfo != null) {
+                taskInfo.addProcess(process);
+                log.info("Python进程已添加到任务管理 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                        request.getTaskId(), testCase.getTestCaseId(), testCase.getRound());
+            }
+            
+            // 等待进程完成，使用配置的超时时间
+            boolean completed = process.waitFor(timeoutMinutes, java.util.concurrent.TimeUnit.MINUTES);
+            
+            // 从任务管理中移除进程
+            if (taskInfo != null) {
+                taskInfo.removeProcess(process);
+                log.info("Python进程已从任务管理移除 - 任务ID: {}, 用例ID: {}, 轮次: {}", 
+                        request.getTaskId(), testCase.getTestCaseId(), testCase.getRound());
+            }
+            
+            // 处理执行结果
+            PythonExecutorUtil.PythonExecutionResult executionResult = handleProcessResult(process, completed, scriptPath, testCase, timeoutMinutes, request);
             
             // 解析执行结果和失败原因
             String status = executionResult.getStatus();
@@ -637,5 +662,211 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                     scriptsDir, scriptFileName, e.getMessage());
             return null;
         }
+    }
+    
+    /**
+     * 处理进程执行结果
+     * 
+     * @param process 进程对象
+     * @param completed 是否完成
+     * @param scriptPath 脚本路径
+     * @param testCase 用例信息
+     * @param timeoutMinutes 超时时间
+     * @param request 执行请求
+     * @return 执行结果
+     */
+    private PythonExecutorUtil.PythonExecutionResult handleProcessResult(Process process, boolean completed, 
+                                                                        Path scriptPath, TestCaseExecutionRequest.TestCaseInfo testCase, 
+                                                                        Integer timeoutMinutes, TestCaseExecutionRequest request) {
+        try {
+            // 读取日志文件
+            String rootDir = "/opt";
+            Path rootDirectory = java.nio.file.Paths.get(rootDir);
+            Path taskDir = rootDirectory.resolve(request.getTaskId());
+            Path logsDir = taskDir.resolve("logs");
+            
+            String logFileName;
+            if (testCase.getTestCaseNumber() != null && !testCase.getTestCaseNumber().trim().isEmpty()) {
+                logFileName = String.format("%s_%d.log", testCase.getTestCaseNumber(), testCase.getRound());
+            } else {
+                logFileName = String.format("%d_%d.log", testCase.getTestCaseId(), testCase.getRound());
+            }
+            Path logFilePath = logsDir.resolve(logFileName);
+            
+            String logContent = "";
+            if (Files.exists(logFilePath)) {
+                logContent = new String(Files.readAllBytes(logFilePath), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            
+            // 判断执行结果
+            String status = "SUCCESS";
+            String result = "用例执行成功";
+            String failureReason = null;
+            
+            if (!completed) {
+                status = "FAILED";  // 超时归类为FAILED
+                result = "用例执行超时";
+                failureReason = "用例执行超时: 超过配置的超时时间 " + timeoutMinutes + " 分钟";
+                
+                // 强制终止进程及其子进程
+                terminateProcessAndChildren(process);
+                
+                log.error("用例执行超时 - 用例ID: {}, 轮次: {}, 超时时间: {}分钟", 
+                        testCase.getTestCaseId(), testCase.getRound(), timeoutMinutes);
+            } else if (process.exitValue() != 0) {
+                // 检查是否是环境问题导致的阻塞
+                if (isBlockedByEnvironment(logContent)) {
+                    status = "BLOCKED";
+                    result = "用例执行被阻塞（环境问题）";
+                    failureReason = "环境问题导致用例无法执行: " + analyzeFailureReason(logContent, process.exitValue());
+                } else {
+                    status = "FAILED";
+                    result = "用例执行失败，退出码: " + process.exitValue();
+                    failureReason = analyzeFailureReason(logContent, process.exitValue());
+                }
+            } else {
+                // 根据控制台输出判断结果
+                TestResultAnalysis analysis = analyzeTestOutput(logContent);
+                status = analysis.getStatus();
+                result = analysis.getResult();
+                failureReason = analysis.getFailureReason();
+            }
+            
+            // 上传日志文件到gohttpserver（如果提供了gohttpserver地址）
+            String uploadedLogUrl = null;
+            if (request.getLogReportUrl() != null && !request.getLogReportUrl().trim().isEmpty()) {
+                try {
+                    com.caseexecute.util.GoHttpServerClient goHttpServerClient = new com.caseexecute.util.GoHttpServerClient();
+                    uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, request.getLogReportUrl(), request.getTaskId());
+                    log.info("日志文件上传成功 - 用例ID: {}, 轮次: {}, 上传URL: {}", testCase.getTestCaseId(), testCase.getRound(), uploadedLogUrl);
+                } catch (Exception e) {
+                    log.error("日志文件上传失败 - 用例ID: {}, 轮次: {}, 错误: {}", 
+                            testCase.getTestCaseId(), testCase.getRound(), e.getMessage());
+                }
+            } else {
+                log.info("未提供gohttpserver地址，跳过日志文件上传 - 用例ID: {}, 轮次: {}", testCase.getTestCaseId(), testCase.getRound());
+            }
+            
+            return PythonExecutorUtil.PythonExecutionResult.builder()
+                    .status(status)
+                    .result(result)
+                    .executionTime(System.currentTimeMillis() - System.currentTimeMillis()) // 简化处理
+                    .startTime(java.time.LocalDateTime.now()) // 简化处理
+                    .endTime(java.time.LocalDateTime.now()) // 简化处理
+                    .logContent(logContent)
+                    .logFilePath(uploadedLogUrl != null ? uploadedLogUrl : logFileName)
+                    .failureReason(failureReason)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.error("处理进程执行结果时发生错误 - 用例ID: {}, 轮次: {}, 错误: {}", 
+                    testCase.getTestCaseId(), testCase.getRound(), e.getMessage());
+            
+            return PythonExecutorUtil.PythonExecutionResult.builder()
+                    .status("BLOCKED")
+                    .result("用例执行失败")
+                    .executionTime(0L)
+                    .startTime(java.time.LocalDateTime.now())
+                    .endTime(java.time.LocalDateTime.now())
+                    .logContent("")
+                    .logFilePath("")
+                    .failureReason("处理执行结果时发生错误: " + e.getMessage())
+                    .build();
+        }
+    }
+    
+    /**
+     * 强制终止进程及其子进程
+     */
+    private void terminateProcessAndChildren(Process process) {
+        try {
+            if (process != null && process.isAlive()) {
+                process.destroy();
+                if (!process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    process.destroyForcibly();
+                }
+                log.info("已强制终止进程");
+            }
+        } catch (Exception e) {
+            log.error("终止进程失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 检查是否因环境问题被阻塞
+     */
+    private boolean isBlockedByEnvironment(String logContent) {
+        if (logContent == null) {
+            return false;
+        }
+        
+        String lowerContent = logContent.toLowerCase();
+        return lowerContent.contains("command not found") || 
+               lowerContent.contains("no such file or directory") ||
+               lowerContent.contains("permission denied") ||
+               lowerContent.contains("cannot run program") ||
+               lowerContent.contains("python") && lowerContent.contains("not found");
+    }
+    
+    /**
+     * 分析失败原因
+     */
+    private String analyzeFailureReason(String logContent, int exitCode) {
+        if (logContent == null || logContent.trim().isEmpty()) {
+            return "进程异常退出，退出码: " + exitCode;
+        }
+        
+        // 提取最后几行错误信息
+        String[] lines = logContent.split("\n");
+        StringBuilder errorInfo = new StringBuilder();
+        int startIndex = Math.max(0, lines.length - 5); // 取最后5行
+        
+        for (int i = startIndex; i < lines.length; i++) {
+            if (lines[i].trim().length() > 0) {
+                errorInfo.append(lines[i].trim()).append("; ");
+            }
+        }
+        
+        return errorInfo.length() > 0 ? errorInfo.toString() : "进程异常退出，退出码: " + exitCode;
+    }
+    
+    /**
+     * 分析测试输出
+     */
+    private TestResultAnalysis analyzeTestOutput(String logContent) {
+        if (logContent == null) {
+            return new TestResultAnalysis("BLOCKED", "无法读取执行日志", "日志内容为空");
+        }
+        
+        String lowerContent = logContent.toLowerCase();
+        
+        if (lowerContent.contains("pass") || lowerContent.contains("success") || lowerContent.contains("成功")) {
+            return new TestResultAnalysis("SUCCESS", "用例执行成功", null);
+        } else if (lowerContent.contains("fail") || lowerContent.contains("error") || lowerContent.contains("失败")) {
+            return new TestResultAnalysis("FAILED", "用例执行失败", extractFailureDetails(logContent));
+        } else {
+            return new TestResultAnalysis("BLOCKED", "无法确定执行结果", "日志内容无法解析");
+        }
+    }
+    
+
+    
+    /**
+     * 测试结果分析
+     */
+    private static class TestResultAnalysis {
+        private final String status;
+        private final String result;
+        private final String failureReason;
+        
+        public TestResultAnalysis(String status, String result, String failureReason) {
+            this.status = status;
+            this.result = result;
+            this.failureReason = failureReason;
+        }
+        
+        public String getStatus() { return status; }
+        public String getResult() { return result; }
+        public String getFailureReason() { return failureReason; }
     }
 }
