@@ -3,6 +3,7 @@ package com.caseexecute.controller;
 import com.caseexecute.common.Result;
 import com.caseexecute.dto.TestCaseExecutionRequest;
 import com.caseexecute.service.TestCaseExecutionService;
+import com.caseexecute.util.PythonExecutorUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -150,6 +151,64 @@ public class TestCaseExecutionController {
         } catch (Exception e) {
             log.error("取消任务失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
             return Result.error("取消任务失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 紧急终止所有Python进程（按任务ID）
+     * 
+     * @param taskId 任务ID
+     * @return 终止结果
+     */
+    @PostMapping("/emergency-stop/{taskId}")
+    public Result<Map<String, Object>> emergencyStopPythonProcesses(@PathVariable String taskId) {
+        log.info("紧急终止Python进程 - 任务ID: {}", taskId);
+        
+        try {
+            // 使用PythonExecutorUtil终止所有相关的Python进程
+            PythonExecutorUtil.terminateAllPythonProcessesByTaskId(taskId);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("taskId", taskId);
+            result.put("status", "TERMINATED");
+            result.put("message", "已紧急终止所有相关的Python进程");
+            result.put("timestamp", System.currentTimeMillis());
+            
+            log.info("紧急终止Python进程成功 - 任务ID: {}", taskId);
+            return Result.success(result);
+            
+        } catch (Exception e) {
+            log.error("紧急终止Python进程失败 - 任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+            return Result.error("紧急终止Python进程失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 紧急终止所有Python进程（按脚本路径）
+     * 
+     * @param scriptPath 脚本路径
+     * @return 终止结果
+     */
+    @PostMapping("/emergency-stop-script")
+    public Result<Map<String, Object>> emergencyStopPythonProcessesByScript(@RequestParam String scriptPath) {
+        log.info("紧急终止Python进程 - 脚本路径: {}", scriptPath);
+        
+        try {
+            // 使用PythonExecutorUtil终止所有相关的Python进程
+            PythonExecutorUtil.terminateAllPythonProcessesByScriptPath(scriptPath);
+            
+            Map<String, Object> result = new HashMap<>();
+            result.put("scriptPath", scriptPath);
+            result.put("status", "TERMINATED");
+            result.put("message", "已紧急终止所有相关的Python进程");
+            result.put("timestamp", System.currentTimeMillis());
+            
+            log.info("紧急终止Python进程成功 - 脚本路径: {}", scriptPath);
+            return Result.success(result);
+            
+        } catch (Exception e) {
+            log.error("紧急终止Python进程失败 - 脚本路径: {}, 错误: {}", scriptPath, e.getMessage(), e);
+            return Result.error("紧急终止Python进程失败: " + e.getMessage());
         }
     }
 }

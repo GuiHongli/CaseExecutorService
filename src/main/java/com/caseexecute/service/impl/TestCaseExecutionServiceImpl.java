@@ -682,13 +682,17 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
         }
         
         try {
-            // 1. 取消所有相关进程
+            // 1. 使用PythonExecutorUtil终止所有相关的Python进程及其子进程
+            log.info("开始终止任务ID为 {} 的所有Python进程", taskId);
+            PythonExecutorUtil.terminateAllPythonProcessesByTaskId(taskId);
+            
+            // 2. 取消所有相关进程（Java层面的进程管理）
             taskInfo.cancelAllProcesses();
             
-            // 2. 取消执行Future
+            // 3. 取消执行Future
             taskInfo.cancelExecution();
             
-            // 3. 从运行任务列表中移除
+            // 4. 从运行任务列表中移除
             runningTasks.remove(taskId);
             
             log.info("任务取消成功 - 任务ID: {}", taskId);

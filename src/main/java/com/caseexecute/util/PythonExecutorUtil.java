@@ -8,12 +8,15 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -318,17 +321,50 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         try {
             log.info("开始终止进程及其子进程");
             
-            // 在macOS/Linux系统上，使用pkill命令终止进程树
-            if (System.getProperty("os.name").toLowerCase().contains("mac") || 
-                System.getProperty("os.name").toLowerCase().contains("linux")) {
+            String osName = System.getProperty("os.name").toLowerCase();
+            
+            if (osName.contains("windows")) {
+                // Windows系统
+                terminateProcessTreeWindows(process);
+            } else if (osName.contains("mac") || osName.contains("linux")) {
+                // macOS/Linux系统
                 terminateProcessTreeUnix(process);
             } else {
-                // Windows系统或其他系统，使用Java API
+                // 其他系统，使用Java API
                 terminateProcessJava(process);
             }
             
         } catch (Exception e) {
             log.error("强制终止进程失败: {}", e.getMessage());
+            // 降级到Java API
+            terminateProcessJava(process);
+        }
+    }
+    
+    /**
+     * 在Windows系统上终止进程树
+     * 
+     * @param process 进程对象
+     */
+    private static void terminateProcessTreeWindows(Process process) {
+        try {
+            // 获取进程ID
+            long pid = getProcessId(process);
+            if (pid > 0) {
+                log.info("终止进程树，主进程PID: {}", pid);
+                
+                // 使用taskkill命令终止整个进程树
+                ProcessBuilder taskkillBuilder = new ProcessBuilder("taskkill", "/F", "/T", "/PID", String.valueOf(pid));
+                Process taskkillProcess = taskkillBuilder.start();
+                taskkillProcess.waitFor(5, TimeUnit.SECONDS);
+                
+                log.info("已使用taskkill命令终止进程树");
+            } else {
+                // 如果无法获取PID，使用Java API
+                terminateProcessJava(process);
+            }
+        } catch (Exception e) {
+            log.error("终止进程树失败 - 错误: {}", e.getMessage());
             // 降级到Java API
             terminateProcessJava(process);
         }
@@ -341,12 +377,63 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      */
     private static void terminateProcessTreeUnix(Process process) {
         try {
-            // 在Java 8中，我们无法直接获取进程ID，所以直接使用Java API终止进程
-            terminateProcessJava(process);
-            log.info("已终止进程树");
+            // 获取进程ID
+            long pid = getProcessId(process);
+            if (pid > 0) {
+                log.info("终止进程树，主进程PID: {}", pid);
+                
+                // 使用pkill命令终止整个进程树
+                ProcessBuilder pkillBuilder = new ProcessBuilder("pkill", "-P", String.valueOf(pid));
+                Process pkillProcess = pkillBuilder.start();
+                pkillProcess.waitFor(5, TimeUnit.SECONDS);
+                
+                // 使用kill命令终止主进程
+                ProcessBuilder killBuilder = new ProcessBuilder("kill", "-9", String.valueOf(pid));
+                Process killProcess = killBuilder.start();
+                killProcess.waitFor(5, TimeUnit.SECONDS);
+                
+                log.info("已使用系统命令终止进程树");
+            } else {
+                // 如果无法获取PID，使用Java API
+                terminateProcessJava(process);
+            }
         } catch (Exception e) {
             log.error("终止进程树失败 - 错误: {}", e.getMessage());
+            // 降级到Java API
+            terminateProcessJava(process);
         }
+    }
+    
+    /**
+     * 获取进程ID（Java 8兼容方法）
+     * 
+     * @param process 进程对象
+     * @return 进程ID，如果无法获取则返回-1
+     */
+    private static long getProcessId(Process process) {
+        try {
+            // 在Java 8中，我们无法直接获取进程ID
+            // 但我们可以通过反射尝试获取
+            Class<?> processClass = process.getClass();
+            String className = processClass.getName();
+            
+            if (className.equals("java.lang.UNIXProcess")) {
+                // Unix/Linux/macOS系统
+                Field pidField = processClass.getDeclaredField("pid");
+                pidField.setAccessible(true);
+                return pidField.getLong(process);
+            } else if (className.equals("java.lang.ProcessImpl")) {
+                // Windows系统
+                Field pidField = processClass.getDeclaredField("handle");
+                pidField.setAccessible(true);
+                long handle = pidField.getLong(process);
+                // 在Windows上，handle通常就是进程ID
+                return handle;
+            }
+        } catch (Exception e) {
+            log.debug("无法获取进程ID: {}", e.getMessage());
+        }
+        return -1;
     }
     
     /**
@@ -373,6 +460,385 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             log.info("已终止进程");
         } catch (Exception e) {
             log.error("使用Java API终止进程失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据任务ID终止所有相关的Python进程
+     * 
+     * @param taskId 任务ID
+     */
+    public static void terminateAllPythonProcessesByTaskId(String taskId) {
+        if (taskId == null || taskId.trim().isEmpty()) {
+            log.warn("任务ID为空，无法终止Python进程");
+            return;
+        }
+        
+        try {
+            log.info("开始终止任务ID为 {} 的所有Python进程", taskId);
+            
+            String osName = System.getProperty("os.name").toLowerCase();
+            
+            if (osName.contains("windows")) {
+                terminatePythonProcessesByTaskIdWindows(taskId);
+            } else if (osName.contains("mac") || osName.contains("linux")) {
+                terminatePythonProcessesByTaskIdUnix(taskId);
+            } else {
+                log.warn("当前系统不支持按任务ID终止Python进程");
+            }
+            
+        } catch (Exception e) {
+            log.error("终止任务ID为 {} 的Python进程失败: {}", taskId, e.getMessage());
+        }
+    }
+    
+    /**
+     * 在Windows系统上根据任务ID终止Python进程
+     * 
+     * @param taskId 任务ID
+     */
+    private static void terminatePythonProcessesByTaskIdWindows(String taskId) {
+        try {
+            log.info("开始查找任务ID为 {} 的所有相关进程", taskId);
+            
+            // 第一步：查找直接包含任务ID的Python进程
+            Set<Long> pythonPids = new HashSet<>();
+            Set<Long> allRelatedPids = new HashSet<>();
+            
+            // 查找包含任务ID的Python进程
+            ProcessBuilder tasklistBuilder = new ProcessBuilder("tasklist", "/FO", "CSV", "/V");
+            Process tasklistProcess = tasklistBuilder.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(tasklistProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 查找包含python和任务ID的进程
+                    if (line.contains("python") && line.contains(taskId)) {
+                        // 解析CSV格式的进程信息
+                        String[] parts = line.split(",");
+                        if (parts.length > 1) {
+                            String processName = parts[0].replace("\"", "");
+                            String pidStr = parts[1].replace("\"", "");
+                            
+                            try {
+                                long processId = Long.parseLong(pidStr);
+                                pythonPids.add(processId);
+                                allRelatedPids.add(processId);
+                                log.info("找到Python主进程，PID: {}, 进程名: {}", pidStr, processName);
+                                
+                            } catch (NumberFormatException e) {
+                                log.warn("无法解析进程ID: {}", pidStr);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            tasklistProcess.waitFor(10, TimeUnit.SECONDS);
+            
+            // 第二步：查找这些Python进程的子进程
+            for (Long pythonPid : pythonPids) {
+                findAndAddChildProcesses(pythonPid, allRelatedPids);
+            }
+            
+            // 第三步：终止所有相关进程
+            for (Long pid : allRelatedPids) {
+                try {
+                    log.info("终止进程，PID: {}", pid);
+                    terminateProcessTreeByPidWindows(pid);
+                } catch (Exception e) {
+                    log.warn("终止进程失败，PID: {} - 错误: {}", pid, e.getMessage());
+                }
+            }
+            
+            log.info("已终止任务ID为 {} 的所有相关进程，共 {} 个进程", taskId, allRelatedPids.size());
+            
+        } catch (Exception e) {
+            log.error("在Windows系统上终止Python进程失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 在Unix系统上根据任务ID终止Python进程
+     * 
+     * @param taskId 任务ID
+     */
+    private static void terminatePythonProcessesByTaskIdUnix(String taskId) {
+        try {
+            // 查找包含任务ID的Python进程
+            ProcessBuilder psBuilder = new ProcessBuilder("ps", "aux");
+            Process psProcess = psBuilder.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(psProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 查找包含python3和任务ID的进程
+                    if (line.contains("python3") && line.contains(taskId)) {
+                        String[] parts = line.trim().split("\\s+");
+                        if (parts.length > 1) {
+                            String pid = parts[1];
+                            try {
+                                long processId = Long.parseLong(pid);
+                                log.info("找到相关Python进程，PID: {}, 命令行: {}", pid, line);
+                                
+                                // 终止进程及其子进程
+                                terminateProcessTreeByPid(processId);
+                                
+                            } catch (NumberFormatException e) {
+                                log.warn("无法解析进程ID: {}", pid);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            psProcess.waitFor(10, TimeUnit.SECONDS);
+            log.info("已终止任务ID为 {} 的所有Python进程", taskId);
+            
+        } catch (Exception e) {
+            log.error("在Unix系统上终止Python进程失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 查找并添加子进程到集合中（Windows系统）
+     * 
+     * @param parentPid 父进程ID
+     * @param allPids 所有相关进程ID集合
+     */
+    private static void findAndAddChildProcesses(Long parentPid, Set<Long> allPids) {
+        try {
+            // 使用wmic命令查找子进程
+            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", 
+                    "ParentProcessId=" + parentPid, "get", "ProcessId", "/format:csv");
+            Process wmicProcess = wmicBuilder.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(wmicProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.contains("ProcessId") && !line.equals("Node,ProcessId")) {
+                        String[] parts = line.split(",");
+                        if (parts.length > 1) {
+                            try {
+                                long childPid = Long.parseLong(parts[1].trim());
+                                if (childPid != parentPid) {
+                                    allPids.add(childPid);
+                                    log.info("找到子进程，父进程PID: {}, 子进程PID: {}", parentPid, childPid);
+                                    
+                                    // 递归查找子进程的子进程
+                                    findAndAddChildProcesses(childPid, allPids);
+                                }
+                            } catch (NumberFormatException e) {
+                                log.warn("无法解析子进程ID: {}", parts[1]);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            wmicProcess.waitFor(5, TimeUnit.SECONDS);
+            
+        } catch (Exception e) {
+            log.warn("查找子进程失败，父进程PID: {} - 错误: {}", parentPid, e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据进程ID终止进程树（Windows系统）
+     * 
+     * @param pid 进程ID
+     */
+    private static void terminateProcessTreeByPidWindows(long pid) {
+        try {
+            log.info("终止进程树（Windows），PID: {}", pid);
+            
+            // 使用taskkill命令终止进程树
+            ProcessBuilder taskkillBuilder = new ProcessBuilder("taskkill", "/F", "/T", "/PID", String.valueOf(pid));
+            Process taskkillProcess = taskkillBuilder.start();
+            taskkillProcess.waitFor(5, TimeUnit.SECONDS);
+            
+            log.info("已终止进程树（Windows），PID: {}", pid);
+            
+        } catch (Exception e) {
+            log.error("终止进程树失败（Windows），PID: {} - 错误: {}", pid, e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据进程ID终止进程树（Unix系统）
+     * 
+     * @param pid 进程ID
+     */
+    private static void terminateProcessTreeByPid(long pid) {
+        try {
+            log.info("终止进程树（Unix），PID: {}", pid);
+            
+            // 首先终止所有子进程
+            ProcessBuilder pkillBuilder = new ProcessBuilder("pkill", "-P", String.valueOf(pid));
+            Process pkillProcess = pkillBuilder.start();
+            pkillProcess.waitFor(5, TimeUnit.SECONDS);
+            
+            // 然后终止主进程
+            ProcessBuilder killBuilder = new ProcessBuilder("kill", "-9", String.valueOf(pid));
+            Process killProcess = killBuilder.start();
+            killProcess.waitFor(5, TimeUnit.SECONDS);
+            
+            log.info("已终止进程树（Unix），PID: {}", pid);
+            
+        } catch (Exception e) {
+            log.error("终止进程树失败（Unix），PID: {} - 错误: {}", pid, e.getMessage());
+        }
+    }
+    
+    /**
+     * 根据脚本路径终止所有相关的Python进程
+     * 
+     * @param scriptPath 脚本路径
+     */
+    public static void terminateAllPythonProcessesByScriptPath(String scriptPath) {
+        if (scriptPath == null || scriptPath.trim().isEmpty()) {
+            log.warn("脚本路径为空，无法终止Python进程");
+            return;
+        }
+        
+        try {
+            log.info("开始终止脚本路径为 {} 的所有Python进程", scriptPath);
+            
+            String osName = System.getProperty("os.name").toLowerCase();
+            
+            if (osName.contains("windows")) {
+                terminatePythonProcessesByScriptPathWindows(scriptPath);
+            } else if (osName.contains("mac") || osName.contains("linux")) {
+                terminatePythonProcessesByScriptPathUnix(scriptPath);
+            } else {
+                log.warn("当前系统不支持按脚本路径终止Python进程");
+            }
+            
+        } catch (Exception e) {
+            log.error("终止脚本路径为 {} 的Python进程失败: {}", scriptPath, e.getMessage());
+        }
+    }
+    
+    /**
+     * 在Windows系统上根据脚本路径终止Python进程
+     * 
+     * @param scriptPath 脚本路径
+     */
+    private static void terminatePythonProcessesByScriptPathWindows(String scriptPath) {
+        try {
+            // 获取脚本文件名
+            String scriptName = Paths.get(scriptPath).getFileName().toString();
+            log.info("开始查找脚本 {} 的所有相关进程", scriptName);
+            
+            // 第一步：查找直接包含脚本名称的Python进程
+            Set<Long> pythonPids = new HashSet<>();
+            Set<Long> allRelatedPids = new HashSet<>();
+            
+            // 查找包含脚本名称的Python进程
+            ProcessBuilder tasklistBuilder = new ProcessBuilder("tasklist", "/FO", "CSV", "/V");
+            Process tasklistProcess = tasklistBuilder.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(tasklistProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 查找包含python和脚本名称的进程
+                    if (line.contains("python") && line.contains(scriptName)) {
+                        // 解析CSV格式的进程信息
+                        String[] parts = line.split(",");
+                        if (parts.length > 1) {
+                            String processName = parts[0].replace("\"", "");
+                            String pidStr = parts[1].replace("\"", "");
+                            
+                            try {
+                                long processId = Long.parseLong(pidStr);
+                                pythonPids.add(processId);
+                                allRelatedPids.add(processId);
+                                log.info("找到Python主进程，PID: {}, 进程名: {}, 脚本: {}", pidStr, processName, scriptName);
+                                
+                            } catch (NumberFormatException e) {
+                                log.warn("无法解析进程ID: {}", pidStr);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            tasklistProcess.waitFor(10, TimeUnit.SECONDS);
+            
+            // 第二步：查找这些Python进程的子进程
+            for (Long pythonPid : pythonPids) {
+                findAndAddChildProcesses(pythonPid, allRelatedPids);
+            }
+            
+            // 第三步：终止所有相关进程
+            for (Long pid : allRelatedPids) {
+                try {
+                    log.info("终止进程，PID: {}", pid);
+                    terminateProcessTreeByPidWindows(pid);
+                } catch (Exception e) {
+                    log.warn("终止进程失败，PID: {} - 错误: {}", pid, e.getMessage());
+                }
+            }
+            
+            log.info("已终止脚本 {} 的所有相关进程，共 {} 个进程", scriptName, allRelatedPids.size());
+            
+        } catch (Exception e) {
+            log.error("在Windows系统上终止Python进程失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 在Unix系统上根据脚本路径终止Python进程
+     * 
+     * @param scriptPath 脚本路径
+     */
+    private static void terminatePythonProcessesByScriptPathUnix(String scriptPath) {
+        try {
+            // 获取脚本文件名
+            String scriptName = Paths.get(scriptPath).getFileName().toString();
+            
+            // 查找包含脚本名称的Python进程
+            ProcessBuilder psBuilder = new ProcessBuilder("ps", "aux");
+            Process psProcess = psBuilder.start();
+            
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(psProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 查找包含python3和脚本名称的进程
+                    if (line.contains("python3") && line.contains(scriptName)) {
+                        String[] parts = line.trim().split("\\s+");
+                        if (parts.length > 1) {
+                            String pid = parts[1];
+                            try {
+                                long processId = Long.parseLong(pid);
+                                log.info("找到相关Python进程，PID: {}, 命令行: {}", pid, line);
+                                
+                                // 终止进程及其子进程
+                                terminateProcessTreeByPid(processId);
+                                
+                            } catch (NumberFormatException e) {
+                                log.warn("无法解析进程ID: {}", pid);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            psProcess.waitFor(10, TimeUnit.SECONDS);
+            log.info("已终止脚本路径为 {} 的所有Python进程", scriptPath);
+            
+        } catch (Exception e) {
+            log.error("在Unix系统上终止Python进程失败: {}", e.getMessage());
         }
     }
     
