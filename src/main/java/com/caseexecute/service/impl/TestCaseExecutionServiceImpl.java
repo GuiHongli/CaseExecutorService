@@ -1,6 +1,7 @@
 package com.caseexecute.service.impl;
 
 import com.caseexecute.config.CaseExecutionConfig;
+import com.caseexecute.config.FileStorageConfig;
 import com.caseexecute.dto.TestCaseExecutionRequest;
 import com.caseexecute.dto.TestCaseResultReport;
 import com.caseexecute.service.TestCaseExecutionService;
@@ -34,6 +35,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
 
     @Autowired
     private CaseExecutionConfig caseExecutionConfig;
+    
+    @Autowired
+    private FileStorageConfig fileStorageConfig;
     
     @Autowired
     private HttpReportUtil httpReportUtil;
@@ -104,6 +108,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
     @Override
     public void processTestCaseExecution(TestCaseExecutionRequest request) {
         log.info("开始处理用例执行任务 - 任务ID: {}", request.getTaskId());
+        
+        // 记录UE信息和采集策略信息
+        logTaskContextInfo(request);
         
         // 先创建任务执行信息并存储，确保在异步执行开始前就可用
         TaskExecutionInfo taskInfo = new TaskExecutionInfo(request.getTaskId(), null);
@@ -370,7 +377,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             }
             
             // 启动Python进程并添加到任务管理
-            Process process = PythonExecutorUtil.startPythonProcess(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp());
+            Process process = PythonExecutorUtil.startPythonProcess(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp(), request.getCollectStrategyInfo(), request.getUeList());
             
             if (taskInfo != null) {
                 taskInfo.addProcess(process);
@@ -746,7 +753,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
                                                                         Integer timeoutMinutes, TestCaseExecutionRequest request) {
         try {
             // 读取日志文件
-            String rootDir = "/opt";
+            String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
             Path rootDirectory = java.nio.file.Paths.get(rootDir);
             Path taskDir = rootDirectory.resolve(request.getTaskId());
             Path logsDir = taskDir.resolve("logs");
@@ -916,6 +923,54 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
     }
     
 
+    
+    /**
+     * 记录任务上下文信息（UE信息和采集策略信息）
+     * 
+     * @param request 用例执行任务请求
+     */
+    private void logTaskContextInfo(TestCaseExecutionRequest request) {
+        log.info("=== 任务上下文信息 ===");
+        
+        // 记录UE信息
+        if (request.getUeList() != null && !request.getUeList().isEmpty()) {
+            log.info("执行机关联的UE设备信息:");
+            log.info("  - UE设备数量: {}", request.getUeList().size());
+            for (TestCaseExecutionRequest.UeInfo ue : request.getUeList()) {
+                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 品牌: {}, 端口: {}, 状态: {}", 
+                        ue.getUeId(), ue.getName(), ue.getPurpose(), 
+                        ue.getNetworkTypeName(), ue.getBrand(), ue.getPort(), ue.getStatus());
+                if (ue.getDescription() != null && !ue.getDescription().trim().isEmpty()) {
+                    log.info("    - 描述: {}", ue.getDescription());
+                }
+            }
+        } else {
+            log.warn("执行机未关联UE设备信息");
+        }
+        
+        // 记录采集策略信息
+        if (request.getCollectStrategyInfo() != null) {
+            TestCaseExecutionRequest.CollectStrategyInfo strategy = request.getCollectStrategyInfo();
+            log.info("采集策略信息:");
+            log.info("  - 策略ID: {}", strategy.getId());
+            log.info("  - 策略名称: {}", strategy.getName());
+            log.info("  - 采集次数: {}", strategy.getCollectCount());
+            log.info("  - 业务大类: {}", strategy.getBusinessCategory());
+            log.info("  - APP: {}", strategy.getApp());
+            log.info("  - 意图: {}", strategy.getIntent());
+            log.info("  - 策略状态: {}", strategy.getStatus());
+            if (strategy.getCustomParams() != null && !strategy.getCustomParams().trim().isEmpty()) {
+                log.info("  - 自定义参数: {}", strategy.getCustomParams());
+            }
+            if (strategy.getDescription() != null && !strategy.getDescription().trim().isEmpty()) {
+                log.info("  - 策略描述: {}", strategy.getDescription());
+            }
+        } else {
+            log.warn("未提供采集策略信息");
+        }
+        
+        log.info("=== 任务上下文信息记录完成 ===");
+    }
     
     /**
      * 测试结果分析

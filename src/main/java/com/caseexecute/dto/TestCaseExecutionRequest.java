@@ -59,6 +59,16 @@ public class TestCaseExecutionRequest {
     private String logReportUrl;
     
     /**
+     * 执行机关联的UE全部信息
+     */
+    private List<UeInfo> ueList;
+    
+    /**
+     * 采集策略的所有信息
+     */
+    private CollectStrategyInfo collectStrategyInfo;
+    
+    /**
      * 用例信息
      */
     @Data
@@ -80,5 +90,119 @@ public class TestCaseExecutionRequest {
          */
         @NotNull(message = "轮次不能为空")
         private Integer round;
+    }
+    
+    /**
+     * UE信息
+     */
+    @Data
+    public static class UeInfo {
+        
+        /**
+         * UE ID
+         */
+        private Long id;
+        
+        /**
+         * UE唯一标识
+         */
+        private String ueId;
+        
+        /**
+         * UE名称
+         */
+        private String name;
+        
+        /**
+         * UE用途
+         */
+        private String purpose;
+        
+        /**
+         * 网络类型ID
+         */
+        private Long networkTypeId;
+        
+        /**
+         * 网络类型名称
+         */
+        private String networkTypeName;
+        
+        /**
+         * UE品牌
+         */
+        private String brand;
+        
+        /**
+         * UE端口
+         */
+        private String port;
+        
+        /**
+         * UE描述
+         */
+        private String description;
+        
+        /**
+         * UE状态
+         */
+        private Integer status;
+    }
+    
+    /**
+     * 采集策略信息
+     */
+    @Data
+    public static class CollectStrategyInfo {
+        
+        /**
+         * 策略ID
+         */
+        private Long id;
+        
+        /**
+         * 策略名称
+         */
+        private String name;
+        
+        /**
+         * 采集次数
+         */
+        private Integer collectCount;
+        
+        /**
+         * 用例集ID
+         */
+        private Long testCaseSetId;
+        
+        /**
+         * 业务大类
+         */
+        private String businessCategory;
+        
+        /**
+         * APP
+         */
+        private String app;
+        
+        /**
+         * 意图
+         */
+        private String intent;
+        
+        /**
+         * 自定义参数
+         */
+        private String customParams;
+        
+        /**
+         * 策略描述
+         */
+        private String description;
+        
+        /**
+         * 策略状态
+         */
+        private Integer status;
     }
 }

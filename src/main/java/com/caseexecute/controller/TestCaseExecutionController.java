@@ -50,11 +50,40 @@ public class TestCaseExecutionController {
             log.info("  - 结果上报URL: {}", request.getResultReportUrl());
             log.info("  - 日志上报URL: {}", request.getLogReportUrl());
             
+            // 记录UE信息详情
+            if (request.getUeList() != null && !request.getUeList().isEmpty()) {
+                log.info("执行机关联的UE信息:");
+                log.info("  - UE数量: {}", request.getUeList().size());
+                for (TestCaseExecutionRequest.UeInfo ue : request.getUeList()) {
+                    log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 品牌: {}, 状态: {}", 
+                            ue.getUeId(), ue.getName(), ue.getPurpose(), 
+                            ue.getNetworkTypeName(), ue.getBrand(), ue.getStatus());
+                }
+            } else {
+                log.warn("执行机未关联UE信息");
+            }
+            
+            // 记录采集策略信息详情
+            if (request.getCollectStrategyInfo() != null) {
+                TestCaseExecutionRequest.CollectStrategyInfo strategy = request.getCollectStrategyInfo();
+                log.info("采集策略信息:");
+                log.info("  - 策略ID: {}", strategy.getId());
+                log.info("  - 策略名称: {}", strategy.getName());
+                log.info("  - 采集次数: {}", strategy.getCollectCount());
+                log.info("  - 业务大类: {}", strategy.getBusinessCategory());
+                log.info("  - APP: {}", strategy.getApp());
+                log.info("  - 意图: {}", strategy.getIntent());
+                log.info("  - 自定义参数: {}", strategy.getCustomParams());
+                log.info("  - 策略状态: {}", strategy.getStatus());
+            } else {
+                log.warn("未提供采集策略信息");
+            }
+            
             // 记录用例列表详情
             log.info("用例列表:");
             for (TestCaseExecutionRequest.TestCaseInfo testCase : request.getTestCaseList()) {
-                log.info("  - 用例ID: {}, 轮次: {}", 
-                        testCase.getTestCaseId(), testCase.getRound());
+                log.info("  - 用例ID: {}, 用例编号: {}, 轮次: {}", 
+                        testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound());
             }
             
             // TODO: 这里可以添加具体的任务处理逻辑
@@ -74,6 +103,8 @@ public class TestCaseExecutionController {
             result.put("message", "用例执行任务已接收");
             result.put("executorIp", request.getExecutorIp());
             result.put("testCaseCount", request.getTestCaseList().size());
+            result.put("ueCount", request.getUeList() != null ? request.getUeList().size() : 0);
+            result.put("hasCollectStrategy", request.getCollectStrategyInfo() != null);
             result.put("timestamp", System.currentTimeMillis());
             
             log.info("用例执行任务接收成功 - 任务ID: {}", request.getTaskId());

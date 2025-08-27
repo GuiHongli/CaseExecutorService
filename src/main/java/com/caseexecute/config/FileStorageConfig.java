@@ -18,7 +18,7 @@ public class FileStorageConfig {
     /**
      * 文件存储根目录
      */
-    private String rootDirectory = "/opt";
+    private String rootDirectory = System.getProperty("java.io.tmpdir");
     
     /**
      * 是否在任务完成后自动清理文件

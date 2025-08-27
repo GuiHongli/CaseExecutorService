@@ -1,6 +1,7 @@
 package com.caseexecute.util;
 
 import com.caseexecute.config.FileStorageConfig;
+import com.caseexecute.dto.TestCaseExecutionRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
@@ -15,12 +16,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Python脚本执行工具类
@@ -63,174 +69,6 @@ public class PythonExecutorUtil implements ApplicationContextAware {
 
     
 
-    
-    /**
-     * 执行Python脚本（带超时参数）
-     * 
-     * @param scriptPath 脚本路径
-     * @param testCaseId 用例ID
-     * @param testCaseNumber 用例编号
-     * @param round 轮次
-     * @param timeoutMinutes 超时时间（分钟）
-     * @param goHttpServerUrl gohttpserver地址（可选）
-     * @param taskId 任务ID（可选）
-     * @param executorIp 执行机IP地址
-     * @return 执行结果
-     * @throws Exception 执行异常
-     */
-    public static PythonExecutionResult executePythonScript(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, Integer timeoutMinutes, String goHttpServerUrl, String taskId, String executorIp) throws Exception {
-        log.info("开始执行Python脚本 - 脚本路径: {}, 用例ID: {}, 轮次: {}, 超时时间: {}分钟", 
-                scriptPath, testCaseId, round, timeoutMinutes);
-        
-        // 检查脚本文件是否存在
-        if (!Files.exists(scriptPath)) {
-            throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
-        }
-        
-        // 创建日志目录 - 使用/opt/taskid/logs路径
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
-        Path rootDirectory = Paths.get(rootDir);
-        Path taskDir = rootDirectory.resolve(taskId);
-        Path logsDir = taskDir.resolve("logs");
-        
-        // 确保目录存在
-        if (!Files.exists(rootDirectory)) {
-            Files.createDirectories(rootDirectory);
-        }
-        if (!Files.exists(taskDir)) {
-            Files.createDirectories(taskDir);
-        }
-        if (!Files.exists(logsDir)) {
-            Files.createDirectories(logsDir);
-        }
-        
-        // 创建日志文件路径 - 使用用例编号_轮次.log格式
-        String logFileName;
-        if (testCaseNumber != null && !testCaseNumber.trim().isEmpty()) {
-            logFileName = String.format("%s_%d.log", testCaseNumber, round);
-        } else {
-            // 如果没有用例编号，则使用用例ID
-            logFileName = String.format("%d_%d.log", testCaseId, round);
-        }
-        Path logFilePath = logsDir.resolve(logFileName);
-        
-        LocalDateTime startTime = LocalDateTime.now();
-        long startTimeMillis = System.currentTimeMillis();
-        
-        // 执行Python脚本 - 直接使用系统python3命令
-        String pythonCommand = "python3";
-        log.info("使用系统Python3执行器: {}", pythonCommand);
-        
-        log.info("执行机IP地址: {}", executorIp);
-        
-        // 构建命令参数：python3 script_path executor_ip
-        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString(), executorIp);
-        processBuilder.redirectErrorStream(true);
-        
-        // 设置环境变量以确保正确的字符编码
-        processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
-        processBuilder.environment().put("LANG", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_ALL", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_CTYPE", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_MESSAGES", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_MONETARY", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_NUMERIC", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_TIME", "zh_CN.UTF-8");
-        processBuilder.environment().put("LC_COLLATE", "zh_CN.UTF-8");
-        
-        Process process = processBuilder.start();
-        
-        // 声明completed变量
-        boolean completed;
-        
-        // 输出执行开始日志
-        RealTimeLogOutput.logExecutionStart(testCaseId, round, testCaseNumber, scriptPath.toString());
-        
-        // 创建日志文件输出流
-        try (BufferedWriter logWriter = Files.newBufferedWriter(logFilePath, StandardCharsets.UTF_8)) {
-            
-            // 启动实时日志输出
-            Future<?> logOutputFuture = RealTimeLogOutput.startRealTimeLogOutput(
-                    process, logWriter, testCaseId, round, testCaseNumber);
-            
-            // 等待执行完成，使用配置的超时时间
-            completed = process.waitFor(timeoutMinutes, TimeUnit.MINUTES);
-            
-            // 等待日志输出完成
-            RealTimeLogOutput.waitForLogOutput(logOutputFuture, 5);
-        } // 关闭日志文件输出流
-        
-        LocalDateTime endTime = LocalDateTime.now();
-        long endTimeMillis = System.currentTimeMillis();
-        long executionTime = endTimeMillis - startTimeMillis;
-        
-        // 读取执行日志
-        String logContent = new String(Files.readAllBytes(logFilePath), StandardCharsets.UTF_8);
-        
-        // 判断执行结果
-        String status = "SUCCESS";
-        String result = "用例执行成功";
-        String failureReason = null;
-        
-        if (!completed) {
-            status = "FAILED";  // 超时归类为FAILED
-            result = "用例执行超时";
-            failureReason = "用例执行超时: 超过配置的超时时间 " + timeoutMinutes + " 分钟";
-            
-            // 强制终止进程及其子进程
-            terminateProcessAndChildren(process);
-            
-            RealTimeLogOutput.logError(testCaseId, round, testCaseNumber, 
-                    "用例执行超时: 超过配置的超时时间 " + timeoutMinutes + " 分钟");
-        } else if (process.exitValue() != 0) {
-            // 检查是否是环境问题导致的阻塞
-            if (isBlockedByEnvironment(logContent)) {
-                status = "BLOCKED";
-                result = "用例执行被阻塞（环境问题）";
-                failureReason = "环境问题导致用例无法执行: " + analyzeFailureReason(logContent, process.exitValue());
-            } else {
-                status = "FAILED";
-                result = "用例执行失败，退出码: " + process.exitValue();
-                failureReason = analyzeFailureReason(logContent, process.exitValue());
-            }
-        } else {
-            // 根据控制台输出判断结果
-            TestResultAnalysis analysis = analyzeTestOutput(logContent);
-            status = analysis.getStatus();
-            result = analysis.getResult();
-            failureReason = analysis.getFailureReason();
-        }
-        
-        // 输出执行结束日志
-        RealTimeLogOutput.logExecutionEnd(testCaseId, round, testCaseNumber, status, executionTime);
-        
-        // 上传日志文件到gohttpserver（如果提供了gohttpserver地址）
-        String uploadedLogUrl = null;
-        if (goHttpServerUrl != null && !goHttpServerUrl.trim().isEmpty()) {
-            try {
-                GoHttpServerClient goHttpServerClient = new GoHttpServerClient();
-                uploadedLogUrl = goHttpServerClient.uploadLocalFile(logFilePath.toString(), logFileName, goHttpServerUrl, taskId);
-                log.info("日志文件上传成功 - 用例ID: {}, 轮次: {}, 上传URL: {}", testCaseId, round, uploadedLogUrl);
-            } catch (Exception e) {
-                RealTimeLogOutput.logError(testCaseId, round, testCaseNumber, 
-                        "日志文件上传失败: " + e.getMessage());
-            }
-        } else {
-            log.info("未提供gohttpserver地址，跳过日志文件上传 - 用例ID: {}, 轮次: {}", testCaseId, round);
-        }
-        
-        return PythonExecutionResult.builder()
-                .status(status)
-                .result(result)
-                .executionTime(executionTime)
-                .startTime(startTime)
-                .endTime(endTime)
-                .logContent(logContent)
-                .logFilePath(uploadedLogUrl != null ? uploadedLogUrl : logFileName)
-                .failureReason(failureReason)
-                .build();
-    }
-    
     /**
      * 启动Python脚本进程（不等待完成）
      * 
@@ -241,9 +79,11 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param goHttpServerUrl gohttpserver地址（可选）
      * @param taskId 任务ID（可选）
      * @param executorIp 执行机IP地址
+     * @param collectStrategyInfo 采集策略信息（可选）
+     * @param ueList UE列表信息（可选）
      * @return 进程对象
      */
-    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId, String executorIp) throws Exception {
+    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId, String executorIp, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, List<TestCaseExecutionRequest.UeInfo> ueList) throws Exception {
         log.info("启动Python脚本进程 - 脚本路径: {}, 用例ID: {}, 轮次: {}", 
                 scriptPath, testCaseId, round);
         
@@ -252,8 +92,8 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             throw new RuntimeException("Python脚本文件不存在: " + scriptPath);
         }
         
-        // 创建日志目录 - 使用/opt/taskid/logs路径
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+        // 创建日志目录 - 使用临时目录或配置的目录
+        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         Path logsDir = taskDir.resolve("logs");
@@ -279,16 +119,107 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         }
         Path logFilePath = logsDir.resolve(logFileName);
         
-        // 执行Python脚本 - 直接使用系统python3命令
-        String pythonCommand = "python3";
-        log.info("使用系统Python3执行器: {}", pythonCommand);
+        // 执行Python脚本 - 直接使用系统python命令
+        String pythonCommand = "python";
+        log.info("使用系统Python执行器: {}", pythonCommand);
         
         log.info("执行机IP地址: {}", executorIp);
         
-        // 构建命令参数：python3 script_path executor_ip
-        ProcessBuilder processBuilder = new ProcessBuilder(pythonCommand, scriptPath.toString(), executorIp);
+        // 记录采集策略信息
+        if (collectStrategyInfo != null) {
+            log.info("采集策略信息 - 业务大类: {}, APP: {}, 意图: {}", 
+                    collectStrategyInfo.getBusinessCategory(), collectStrategyInfo.getApp(), collectStrategyInfo.getIntent());
+        } else {
+            log.warn("未提供采集策略信息");
+        }
+        
+        // 记录UE信息
+        if (ueList != null && !ueList.isEmpty()) {
+            log.info("UE信息 - UE数量: {}", ueList.size());
+            for (TestCaseExecutionRequest.UeInfo ue : ueList) {
+                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 品牌: {}, 状态: {}", 
+                        ue.getUeId(), ue.getName(), ue.getPurpose(), 
+                        ue.getNetworkTypeName(), ue.getBrand(), ue.getStatus());
+            }
+        } else {
+            log.warn("未提供UE信息");
+        }
+        
+        // 构建命令参数列表
+        List<String> commandArgs = new ArrayList<>();
+        commandArgs.add(pythonCommand);
+        commandArgs.add(scriptPath.toString());
+        commandArgs.add("--ip");
+        commandArgs.add(executorIp);
+        
+        // 添加采集策略参数
+        if (collectStrategyInfo != null) {
+            if (collectStrategyInfo.getBusinessCategory() != null && !collectStrategyInfo.getBusinessCategory().trim().isEmpty()) {
+                commandArgs.add("--category");
+                commandArgs.add(collectStrategyInfo.getBusinessCategory());
+            }
+            if (collectStrategyInfo.getApp() != null && !collectStrategyInfo.getApp().trim().isEmpty()) {
+                commandArgs.add("--app");
+                commandArgs.add(collectStrategyInfo.getApp());
+            }
+            if (collectStrategyInfo.getIntent() != null && !collectStrategyInfo.getIntent().trim().isEmpty()) {
+                commandArgs.add("--dataset_round");
+                commandArgs.add(collectStrategyInfo.getIntent());
+            }
+            
+            // 添加自定义参数
+            if (collectStrategyInfo.getCustomParams() != null && !collectStrategyInfo.getCustomParams().trim().isEmpty()) {
+                try {
+                    // 解析自定义参数字符串，支持JSON格式和key=value格式
+                    Map<String, String> customParamsMap = parseCustomParams(collectStrategyInfo.getCustomParams());
+                    for (Map.Entry<String, String> entry : customParamsMap.entrySet()) {
+                        String key = entry.getKey();
+                        String value = entry.getValue();
+                        if (key != null && !key.trim().isEmpty() && value != null) {
+                            commandArgs.add("--" + key);
+                            commandArgs.add(value);
+                            log.info("添加自定义参数: --{} {}", key, value);
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("解析自定义参数失败: {}, 错误: {}", collectStrategyInfo.getCustomParams(), e.getMessage());
+                }
+            }
+        }
+        
+        // 添加UE列表参数
+        if (ueList != null && !ueList.isEmpty()) {
+            try {
+                // 将UE列表转换为JSON字符串
+                ObjectMapper objectMapper = new ObjectMapper();
+                String ueListJson = objectMapper.writeValueAsString(ueList);
+                commandArgs.add("--uelist");
+                commandArgs.add(ueListJson);
+                log.info("添加UE列表参数: --uelist {}", ueListJson);
+            } catch (Exception e) {
+                log.warn("序列化UE列表失败: {}, 错误: {}", ueList, e.getMessage());
+            }
+        }
+        
+        // 构建命令参数：python3 script_path --ip executor_ip --category business_category --app app_value --dataset_round intent --key value --uelist ue_json
+        ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
         processBuilder.redirectErrorStream(true);
         processBuilder.redirectOutput(logFilePath.toFile());
+        
+        // 打印完整的Python命令
+        StringBuilder commandString = new StringBuilder();
+        for (String arg : commandArgs) {
+            if (commandString.length() > 0) {
+                commandString.append(" ");
+            }
+            // 如果参数包含空格，用引号包围
+            if (arg.contains(" ")) {
+                commandString.append("\"").append(arg).append("\"");
+            } else {
+                commandString.append(arg);
+            }
+        }
+        log.info("执行Python命令: {}", commandString.toString());
         
         // 设置环境变量以确保正确的字符编码
         processBuilder.environment().put("PYTHONIOENCODING", "utf-8");
@@ -306,6 +237,62 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 testCaseId, round, logFilePath);
         
         return process;
+    }
+    
+    /**
+     * 解析自定义参数字符串
+     * 支持JSON格式和key=value格式
+     * 
+     * @param customParams 自定义参数字符串
+     * @return 解析后的参数Map
+     */
+    private static Map<String, String> parseCustomParams(String customParams) {
+        Map<String, String> paramsMap = new HashMap<>();
+        
+        if (customParams == null || customParams.trim().isEmpty()) {
+            return paramsMap;
+        }
+        
+        String trimmedParams = customParams.trim();
+        
+        // 尝试解析为JSON格式
+        if (trimmedParams.startsWith("{") && trimmedParams.endsWith("}")) {
+            try {
+                // 简单的JSON解析，处理基本的key-value对
+                String jsonContent = trimmedParams.substring(1, trimmedParams.length() - 1);
+                String[] pairs = jsonContent.split(",");
+                for (String pair : pairs) {
+                    String[] keyValue = pair.split(":");
+                    if (keyValue.length == 2) {
+                        String key = keyValue[0].trim().replace("\"", "").replace("'", "");
+                        String value = keyValue[1].trim().replace("\"", "").replace("'", "");
+                        paramsMap.put(key, value);
+                    }
+                }
+                log.info("成功解析JSON格式自定义参数: {}", customParams);
+                return paramsMap;
+            } catch (Exception e) {
+                log.warn("JSON格式解析失败，尝试key=value格式: {}", e.getMessage());
+            }
+        }
+        
+        // 尝试解析为key=value格式
+        try {
+            String[] pairs = trimmedParams.split(",");
+            for (String pair : pairs) {
+                String[] keyValue = pair.split("=");
+                if (keyValue.length == 2) {
+                    String key = keyValue[0].trim();
+                    String value = keyValue[1].trim();
+                    paramsMap.put(key, value);
+                }
+            }
+            log.info("成功解析key=value格式自定义参数: {}", customParams);
+        } catch (Exception e) {
+            log.warn("key=value格式解析失败: {}", e.getMessage());
+        }
+        
+        return paramsMap;
     }
     
     /**

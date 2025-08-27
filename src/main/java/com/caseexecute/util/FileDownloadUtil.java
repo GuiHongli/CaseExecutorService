@@ -47,8 +47,8 @@ public class FileDownloadUtil {
     public static Path downloadFile(String url, String taskId) throws Exception {
         log.info("开始下载文件 - URL: {}, 任务ID: {}", url, taskId);
         
-        // 获取配置的根目录
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+        // 获取配置的根目 todo 
+        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         
@@ -137,10 +137,10 @@ public class FileDownloadUtil {
      * @throws Exception 解压异常
      */
     public static Path extractZipFile(Path zipFilePath, String taskId) throws Exception {
-        log.info("开始解压ZIP文件到/opt目录 - 路径: {}, 任务ID: {}", zipFilePath, taskId);
+        log.info("开始解压ZIP文件到临时目录 - 路径: {}, 任务ID: {}", zipFilePath, taskId);
         
         // 获取配置的根目录
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         
@@ -251,7 +251,7 @@ public class FileDownloadUtil {
      */
     public static void cleanupTaskDirectory(String taskId) {
         try {
-            String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : "/opt";
+            String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
             Path taskDir = Paths.get(rootDir).resolve(taskId);
             if (Files.exists(taskDir)) {
                 FileUtils.deleteDirectory(taskDir.toFile());
