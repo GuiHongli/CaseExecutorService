@@ -138,9 +138,9 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         if (ueList != null && !ueList.isEmpty()) {
             log.info("UE信息 - UE数量: {}", ueList.size());
             for (TestCaseExecutionRequest.UeInfo ue : ueList) {
-                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 品牌: {}, 状态: {}", 
+                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 厂商: {}, 状态: {}", 
                         ue.getUeId(), ue.getName(), ue.getPurpose(), 
-                        ue.getNetworkTypeName(), ue.getBrand(), ue.getStatus());
+                        ue.getNetworkTypeName(), ue.getVendor(), ue.getStatus());
             }
         } else {
             log.warn("未提供UE信息");

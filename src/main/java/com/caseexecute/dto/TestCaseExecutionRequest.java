@@ -129,9 +129,9 @@ public class TestCaseExecutionRequest {
         private String networkTypeName;
         
         /**
-         * UE品牌
+         * UE厂商
          */
-        private String brand;
+        private String vendor;
         
         /**
          * UE端口

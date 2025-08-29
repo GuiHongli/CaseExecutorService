@@ -937,9 +937,9 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             log.info("执行机关联的UE设备信息:");
             log.info("  - UE设备数量: {}", request.getUeList().size());
             for (TestCaseExecutionRequest.UeInfo ue : request.getUeList()) {
-                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 品牌: {}, 端口: {}, 状态: {}", 
+                log.info("  - UE ID: {}, 名称: {}, 用途: {}, 网络类型: {}, 厂商: {}, 端口: {}, 状态: {}", 
                         ue.getUeId(), ue.getName(), ue.getPurpose(), 
-                        ue.getNetworkTypeName(), ue.getBrand(), ue.getPort(), ue.getStatus());
+                        ue.getNetworkTypeName(), ue.getVendor(), ue.getPort(), ue.getStatus());
                 if (ue.getDescription() != null && !ue.getDescription().trim().isEmpty()) {
                     log.info("    - 描述: {}", ue.getDescription());
                 }
