@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 /**
  * Python脚本执行工具类
@@ -255,41 +256,38 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         
         String trimmedParams = customParams.trim();
         
-        // 尝试解析为JSON格式
-        if (trimmedParams.startsWith("{") && trimmedParams.endsWith("}")) {
+        // 解析JSON数组格式
+        if (trimmedParams.startsWith("[") && trimmedParams.endsWith("]")) {
             try {
-                // 简单的JSON解析，处理基本的key-value对
-                String jsonContent = trimmedParams.substring(1, trimmedParams.length() - 1);
-                String[] pairs = jsonContent.split(",");
-                for (String pair : pairs) {
-                    String[] keyValue = pair.split(":");
-                    if (keyValue.length == 2) {
-                        String key = keyValue[0].trim().replace("\"", "").replace("'", "");
-                        String value = keyValue[1].trim().replace("\"", "").replace("'", "");
-                        paramsMap.put(key, value);
+                ObjectMapper objectMapper = new ObjectMapper();
+                JsonNode jsonArray = objectMapper.readTree(trimmedParams);
+                
+                if (jsonArray.isArray()) {
+                    for (JsonNode item : jsonArray) {
+                        if (item.isObject()) {
+                            // 处理对象格式的参数
+                            item.fields().forEachRemaining(entry -> {
+                                String key = entry.getKey();
+                                String value = entry.getValue().asText();
+                                paramsMap.put(key, value);
+                            });
+                        } else if (item.isTextual()) {
+                            // 处理字符串格式的参数，尝试解析为key=value
+                            String itemStr = item.asText();
+                            String[] keyValue = itemStr.split("=", 2);
+                            if (keyValue.length == 2) {
+                                paramsMap.put(keyValue[0].trim(), keyValue[1].trim());
+                            }
+                        }
                     }
+                    log.info("成功解析JSON数组格式自定义参数: {}", customParams);
+                    return paramsMap;
                 }
-                log.info("成功解析JSON格式自定义参数: {}", customParams);
-                return paramsMap;
             } catch (Exception e) {
-                log.warn("JSON格式解析失败，尝试key=value格式: {}", e.getMessage());
+                log.warn("JSON数组格式解析失败: {}", e.getMessage());
             }
-        }
-        
-        // 尝试解析为key=value格式
-        try {
-            String[] pairs = trimmedParams.split(",");
-            for (String pair : pairs) {
-                String[] keyValue = pair.split("=");
-                if (keyValue.length == 2) {
-                    String key = keyValue[0].trim();
-                    String value = keyValue[1].trim();
-                    paramsMap.put(key, value);
-                }
-            }
-            log.info("成功解析key=value格式自定义参数: {}", customParams);
-        } catch (Exception e) {
-            log.warn("key=value格式解析失败: {}", e.getMessage());
+        } else {
+            log.warn("自定义参数不是JSON数组格式，跳过解析: {}", customParams);
         }
         
         return paramsMap;
