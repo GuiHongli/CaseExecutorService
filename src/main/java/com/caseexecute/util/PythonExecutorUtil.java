@@ -82,9 +82,10 @@ public class PythonExecutorUtil implements ApplicationContextAware {
      * @param executorIp 执行机IP地址
      * @param collectStrategyInfo 采集策略信息（可选）
      * @param ueList UE列表信息（可选）
+     * @param taskCustomParams 采集任务的自定义参数（可选）
      * @return 进程对象
      */
-    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId, String executorIp, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, List<TestCaseExecutionRequest.UeInfo> ueList) throws Exception {
+    public static Process startPythonProcess(Path scriptPath, Long testCaseId, String testCaseNumber, Integer round, String goHttpServerUrl, String taskId, String executorIp, TestCaseExecutionRequest.CollectStrategyInfo collectStrategyInfo, List<TestCaseExecutionRequest.UeInfo> ueList, String taskCustomParams) throws Exception {
         log.info("启动Python脚本进程 - 脚本路径: {}, 用例ID: {}, 轮次: {}", 
                 scriptPath, testCaseId, round);
         
@@ -168,22 +169,22 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 commandArgs.add(collectStrategyInfo.getIntent());
             }
             
-            // 添加自定义参数
-            if (collectStrategyInfo.getCustomParams() != null && !collectStrategyInfo.getCustomParams().trim().isEmpty()) {
+            // 添加采集任务的自定义参数
+            if (taskCustomParams != null && !taskCustomParams.trim().isEmpty()) {
                 try {
                     // 解析自定义参数字符串，支持JSON格式
-                    Map<String, String> customParamsMap = parseCustomParams(collectStrategyInfo.getCustomParams());
+                    Map<String, String> customParamsMap = parseCustomParams(taskCustomParams);
                     for (Map.Entry<String, String> entry : customParamsMap.entrySet()) {
                         String key = entry.getKey();
                         String value = entry.getValue();
                         if (key != null && !key.trim().isEmpty() && value != null) {
                             commandArgs.add("--" + key);
                             commandArgs.add(value);
-                            log.info("添加自定义参数: --{} {}", key, value);
+                            log.info("添加采集任务自定义参数: --{} {}", key, value);
                         }
                     }
                 } catch (Exception e) {
-                    log.warn("解析自定义参数失败: {}, 错误: {}", collectStrategyInfo.getCustomParams(), e.getMessage());
+                    log.warn("解析采集任务自定义参数失败: {}, 错误: {}", taskCustomParams, e.getMessage());
                 }
             }
         }

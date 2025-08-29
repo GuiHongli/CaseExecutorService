@@ -69,6 +69,11 @@ public class TestCaseExecutionRequest {
     private CollectStrategyInfo collectStrategyInfo;
     
     /**
+     * 采集任务的自定义参数（JSON格式）
+     */
+    private String taskCustomParams;
+    
+    /**
      * 用例信息
      */
     @Data

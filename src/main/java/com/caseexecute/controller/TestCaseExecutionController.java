@@ -79,6 +79,13 @@ public class TestCaseExecutionController {
                 log.warn("未提供采集策略信息");
             }
             
+            // 记录采集任务自定义参数信息
+            if (request.getTaskCustomParams() != null && !request.getTaskCustomParams().trim().isEmpty()) {
+                log.info("采集任务自定义参数: {}", request.getTaskCustomParams());
+            } else {
+                log.info("采集任务无自定义参数");
+            }
+            
             // 记录用例列表详情
             log.info("用例列表:");
             for (TestCaseExecutionRequest.TestCaseInfo testCase : request.getTestCaseList()) {
@@ -105,6 +112,7 @@ public class TestCaseExecutionController {
             result.put("testCaseCount", request.getTestCaseList().size());
             result.put("ueCount", request.getUeList() != null ? request.getUeList().size() : 0);
             result.put("hasCollectStrategy", request.getCollectStrategyInfo() != null);
+            result.put("hasTaskCustomParams", request.getTaskCustomParams() != null && !request.getTaskCustomParams().trim().isEmpty());
             result.put("timestamp", System.currentTimeMillis());
             
             log.info("用例执行任务接收成功 - 任务ID: {}", request.getTaskId());

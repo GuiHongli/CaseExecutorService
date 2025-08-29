@@ -377,7 +377,7 @@ public class TestCaseExecutionServiceImpl implements TestCaseExecutionService {
             }
             
             // 启动Python进程并添加到任务管理
-            Process process = PythonExecutorUtil.startPythonProcess(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp(), request.getCollectStrategyInfo(), request.getUeList());
+            Process process = PythonExecutorUtil.startPythonProcess(scriptPath, testCase.getTestCaseId(), testCase.getTestCaseNumber(), testCase.getRound(), request.getLogReportUrl(), request.getTaskId(), request.getExecutorIp(), request.getCollectStrategyInfo(), request.getUeList(), request.getTaskCustomParams());
             
             if (taskInfo != null) {
                 taskInfo.addProcess(process);
