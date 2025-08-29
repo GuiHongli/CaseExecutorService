@@ -270,12 +270,22 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 if (jsonArray.isArray()) {
                     for (JsonNode item : jsonArray) {
                         if (item.isObject()) {
-                            // 处理对象格式的参数
-                            item.fields().forEachRemaining(entry -> {
-                                String key = entry.getKey();
-                                String value = entry.getValue().asText();
-                                paramsMap.put(key, value);
-                            });
+                            // 处理{"key":"a","value":"高清"}格式的参数
+                            String key = null;
+                            String value = null;
+                            
+                            if (item.has("key")) {
+                                key = item.get("key").asText();
+                            }
+                            if (item.has("value")) {
+                                value = item.get("value").asText();
+                            }
+                            
+                            // 如果key和value都存在且不为空，则添加到参数映射中
+                            if (key != null && !key.trim().isEmpty() && value != null && !value.trim().isEmpty()) {
+                                paramsMap.put(key.trim(), value.trim());
+                                log.debug("解析到参数: key={}, value={}", key, value);
+                            }
                         } else if (item.isTextual()) {
                             // 处理字符串格式的参数，尝试解析为key=value
                             String itemStr = item.asText();
@@ -285,11 +295,11 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                             }
                         }
                     }
-                    log.info("成功解析JSON数组格式自定义参数: {}", customParams);
+                    log.info("成功解析JSON数组格式自定义参数: {}, 解析出{}个参数", customParams, paramsMap.size());
                     return paramsMap;
                 }
             } catch (Exception e) {
-                log.warn("JSON数组格式解析失败: {}", e.getMessage());
+                log.warn("JSON数组格式解析失败: {}, 错误: {}", customParams, e.getMessage());
             }
         } else {
             log.warn("自定义参数不是JSON数组格式，跳过解析: {}", customParams);
