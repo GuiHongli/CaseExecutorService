@@ -171,7 +171,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             // 添加自定义参数
             if (collectStrategyInfo.getCustomParams() != null && !collectStrategyInfo.getCustomParams().trim().isEmpty()) {
                 try {
-                    // 解析自定义参数字符串，支持JSON格式和key=value格式
+                    // 解析自定义参数字符串，支持JSON格式
                     Map<String, String> customParamsMap = parseCustomParams(collectStrategyInfo.getCustomParams());
                     for (Map.Entry<String, String> entry : customParamsMap.entrySet()) {
                         String key = entry.getKey();
@@ -194,9 +194,13 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 // 将UE列表转换为JSON字符串
                 ObjectMapper objectMapper = new ObjectMapper();
                 String ueListJson = objectMapper.writeValueAsString(ueList);
+                
+                // 对JSON字符串进行转义处理，避免命令行解析错误
+                String escapedUeListJson = escapeJsonForCommandLine(ueListJson);
+                
                 commandArgs.add("--uelist");
-                commandArgs.add(ueListJson);
-                log.info("添加UE列表参数: --uelist {}", ueListJson);
+                commandArgs.add(escapedUeListJson);
+                log.info("添加UE列表参数: --uelist {}", escapedUeListJson);
             } catch (Exception e) {
                 log.warn("序列化UE列表失败: {}, 错误: {}", ueList, e.getMessage());
             }
@@ -1024,5 +1028,36 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         public String getStatus() { return status; }
         public String getResult() { return result; }
         public String getFailureReason() { return failureReason; }
+    }
+    
+    /**
+     * 对JSON字符串进行转义处理，避免命令行解析错误
+     * 
+     * @param jsonString 原始JSON字符串
+     * @return 转义后的JSON字符串
+     */
+    private static String escapeJsonForCommandLine(String jsonString) {
+        if (jsonString == null || jsonString.isEmpty()) {
+            return jsonString;
+        }
+        
+        // 对JSON字符串中的特殊字符进行转义
+        String escaped = jsonString
+            // 转义双引号
+            .replace("\"", "\\\"")
+            // 转义反斜杠
+            .replace("\\", "\\\\")
+            // 转义单引号（在某些shell中可能需要）
+            .replace("'", "\\'")
+            // 转义换行符
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            // 转义制表符
+            .replace("\t", "\\t");
+        
+        log.debug("JSON转义前: {}", jsonString);
+        log.debug("JSON转义后: {}", escaped);
+        
+        return escaped;
     }
 }
