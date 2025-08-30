@@ -582,7 +582,8 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                     }
                     
                     // 解析CSV格式的进程信息：Node,CommandLine,ProcessId
-                    String[] parts = line.split(",");
+                    // 由于CommandLine可能包含逗号，需要特殊处理
+                    String[] parts = parseWmicCsvLine(line);
                     if (parts.length >= 3) {
                         String node = parts[0].trim();
                         String commandLine = parts[1].trim();
@@ -634,6 +635,37 @@ public class PythonExecutorUtil implements ApplicationContextAware {
     }
     
     /**
+     * 解析wmic命令的CSV输出，处理CommandLine字段中可能包含的逗号
+     * 
+     * @param line CSV格式的行
+     * @return 解析后的字段数组
+     */
+    private static String[] parseWmicCsvLine(String line) {
+        List<String> fields = new ArrayList<>();
+        StringBuilder currentField = new StringBuilder();
+        boolean inQuotes = false;
+        
+        for (int i = 0; i < line.length(); i++) {
+            char c = line.charAt(i);
+            
+            if (c == '"') {
+                inQuotes = !inQuotes;
+            } else if (c == ',' && !inQuotes) {
+                // 遇到逗号且不在引号内，表示字段结束
+                fields.add(currentField.toString());
+                currentField.setLength(0);
+            } else {
+                currentField.append(c);
+            }
+        }
+        
+        // 添加最后一个字段
+        fields.add(currentField.toString());
+        
+        return fields.toArray(new String[0]);
+    }
+    
+    /**
      * 列出Windows系统上所有正在运行的Python进程及其命令行参数
      */
     public static void listAllPythonProcessesWindows() {
@@ -664,7 +696,8 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                     }
                     
                     // 解析CSV格式的进程信息：Node,CommandLine,ProcessId
-                    String[] parts = line.split(",");
+                    // 由于CommandLine可能包含逗号，需要特殊处理
+                    String[] parts = parseWmicCsvLine(line);
                     if (parts.length >= 3) {
                         String node = parts[0].trim();
                         String commandLine = parts[1].trim();
