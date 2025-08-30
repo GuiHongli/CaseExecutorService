@@ -560,7 +560,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
             Set<Long> allRelatedPids = new HashSet<>();
             
             // 使用wmic命令获取所有Python进程的详细信息，包括命令行参数
-            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine", "/format:csv");
+            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", "name='python.exe'", "get", "Node,ProcessId,CommandLine", "/format:csv");
             Process wmicProcess = wmicBuilder.start();
             
             try (BufferedReader reader = new BufferedReader(
@@ -581,11 +581,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                         continue;
                     }
                     
-                    // 解析CSV格式的进程信息
+                    // 解析CSV格式的进程信息：Node,CommandLine,ProcessId
                     String[] parts = line.split(",");
-                    if (parts.length >= 2) {
-                        String processId = parts[0].trim();
+                    if (parts.length >= 3) {
+                        String node = parts[0].trim();
                         String commandLine = parts[1].trim();
+                        String processId = parts[2].trim();
                         
                         // 检查命令行是否包含任务ID
                         if (commandLine.contains(taskId)) {
@@ -603,7 +604,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 }
             }
             
-            wmicProcess.waitFor(10, TimeUnit.SECONDS);
+            // 设置较短的超时时间，因为wmic命令通常很快完成
+            boolean completed = wmicProcess.waitFor(3, TimeUnit.SECONDS);
+            if (!completed) {
+                log.warn("wmic命令执行超时，强制终止进程");
+                wmicProcess.destroyForcibly();
+            }
             
             // 第二步：查找这些Python进程的子进程
             for (Long pythonPid : pythonPids) {
@@ -657,11 +663,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                         continue;
                     }
                     
-                    // 解析CSV格式的进程信息
+                    // 解析CSV格式的进程信息：Node,CommandLine,ProcessId
                     String[] parts = line.split(",");
-                    if (parts.length >= 2) {
-                        String processId = parts[0].trim();
+                    if (parts.length >= 3) {
+                        String node = parts[0].trim();
                         String commandLine = parts[1].trim();
+                        String processId = parts[2].trim();
                         
                         try {
                             long pid = Long.parseLong(processId);
@@ -683,7 +690,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 }
             }
             
-            wmicProcess.waitFor(10, TimeUnit.SECONDS);
+            // 设置较短的超时时间，因为wmic命令通常很快完成
+            boolean completed = wmicProcess.waitFor(3, TimeUnit.SECONDS);
+            if (!completed) {
+                log.warn("wmic命令执行超时，强制终止进程");
+                wmicProcess.destroyForcibly();
+            }
             
         } catch (Exception e) {
             log.error("在Windows系统上查找Python进程失败: {}", e.getMessage());
