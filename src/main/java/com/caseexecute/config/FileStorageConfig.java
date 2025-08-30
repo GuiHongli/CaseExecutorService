@@ -11,13 +11,13 @@ import org.springframework.stereotype.Component;
  * @since 2024-01-01
  */
 @Data
-@ConfigurationProperties(prefix = "case-execution.file-storage")
+@ConfigurationProperties(prefix = "case.execution.file-storage")
 public class FileStorageConfig {
     
     /**
      * 文件存储根目录
      */
-    private String rootDirectory = System.getProperty("java.io.tmpdir");
+    private String rootDirectory;
     
     /**
      * 是否在任务完成后自动清理文件

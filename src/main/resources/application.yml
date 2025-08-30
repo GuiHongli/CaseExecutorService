@@ -45,7 +45,7 @@ case:
     # 文件存储配置
     file-storage:
       # 文件存储根目录
-      root-directory: /tmp/case-execute
+      root-directory: D:/opt
       # 是否在任务完成后自动清理文件
       auto-cleanup: true
       # 文件保留时间（小时），超过此时间自动清理
