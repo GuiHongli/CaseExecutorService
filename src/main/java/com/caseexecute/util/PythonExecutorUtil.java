@@ -224,7 +224,6 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         // 构建命令参数：python3 script_path --ip executor_ip --category business_category --app app_value --dataset_round intent --key value --uelist ue_json
         ProcessBuilder processBuilder = new ProcessBuilder(commandArgs);
         processBuilder.redirectErrorStream(true);
-        processBuilder.redirectOutput(logFilePath.toFile());
         
         // 打印完整的Python命令
         StringBuilder commandString = new StringBuilder();
@@ -256,7 +255,45 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         log.info("Python脚本进程已启动 - 用例ID: {}, 轮次: {}, 日志文件: {}", 
                 testCaseId, round, logFilePath);
         
+        // 启动异步线程来读取Python进程的输出，同时输出到控制台和日志文件
+        startOutputReader(process, logFilePath, testCaseId, round);
+        
         return process;
+    }
+    
+    /**
+     * 启动输出读取器，同时将Python进程的输出输出到控制台和日志文件
+     * 
+     * @param process Python进程
+     * @param logFilePath 日志文件路径
+     * @param testCaseId 用例ID
+     * @param round 轮次
+     */
+    private static void startOutputReader(Process process, Path logFilePath, Long testCaseId, Integer round) {
+        executorService.submit(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                 BufferedWriter fileWriter = new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(logFilePath), StandardCharsets.UTF_8))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // 输出到控制台
+                    System.out.println(String.format("[Python-用例%d-轮次%d] %s", testCaseId, round, line));
+                    
+                    // 输出到日志文件
+                    fileWriter.write(line);
+                    fileWriter.newLine();
+                    fileWriter.flush();
+                    
+                    // 输出到服务日志
+                    log.info("[Python-用例{}-轮次{}] {}", testCaseId, round, line);
+                }
+                
+                log.info("Python进程输出读取完成 - 用例ID: {}, 轮次: {}", testCaseId, round);
+                
+            } catch (IOException e) {
+                log.error("读取Python进程输出时发生错误 - 用例ID: {}, 轮次: {}, 错误: {}", testCaseId, round, e.getMessage(), e);
+            }
+        });
     }
     
     /**
