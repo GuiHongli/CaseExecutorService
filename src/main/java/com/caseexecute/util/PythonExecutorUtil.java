@@ -152,21 +152,21 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         commandArgs.add(pythonCommand);
         commandArgs.add(scriptPath.toString());
         commandArgs.add("--ip");
-        commandArgs.add(executorIp);
+        commandArgs.add("\"" + executorIp + "\"");
         
         // 添加采集策略参数
         if (collectStrategyInfo != null) {
             if (collectStrategyInfo.getBusinessCategory() != null && !collectStrategyInfo.getBusinessCategory().trim().isEmpty()) {
                 commandArgs.add("--category");
-                commandArgs.add(collectStrategyInfo.getBusinessCategory());
+                commandArgs.add("\"" + collectStrategyInfo.getBusinessCategory() + "\"");
             }
             if (collectStrategyInfo.getApp() != null && !collectStrategyInfo.getApp().trim().isEmpty()) {
                 commandArgs.add("--app");
-                commandArgs.add(collectStrategyInfo.getApp());
+                commandArgs.add("\"" + collectStrategyInfo.getApp() + "\"");
             }
             if (collectStrategyInfo.getIntent() != null && !collectStrategyInfo.getIntent().trim().isEmpty()) {
                 commandArgs.add("--dataset_round");
-                commandArgs.add(collectStrategyInfo.getIntent());
+                commandArgs.add("\"" + collectStrategyInfo.getIntent() + "\"");
             }
             
             // 添加采集任务的自定义参数
@@ -179,8 +179,8 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                         String value = entry.getValue();
                         if (key != null && !key.trim().isEmpty() && value != null) {
                             commandArgs.add("--" + key);
-                            commandArgs.add(value);
-                            log.info("添加采集任务自定义参数: --{} {}", key, value);
+                            commandArgs.add("\"" + value + "\"");
+                            log.info("添加采集任务自定义参数: --{} \"{}\"", key, value);
                         }
                     }
                 } catch (Exception e) {
@@ -200,8 +200,8 @@ public class PythonExecutorUtil implements ApplicationContextAware {
                 String escapedUeListJson = escapeJsonForCommandLine(ueListJson);
                 
                 commandArgs.add("--uelist");
-                commandArgs.add(escapedUeListJson);
-                log.info("添加UE列表参数: --uelist {}", escapedUeListJson);
+                commandArgs.add("\"" + escapedUeListJson + "\"");
+                log.info("添加UE列表参数: --uelist \"{}\"", escapedUeListJson);
             } catch (Exception e) {
                 log.warn("序列化UE列表失败: {}, 错误: {}", ueList, e.getMessage());
             }
