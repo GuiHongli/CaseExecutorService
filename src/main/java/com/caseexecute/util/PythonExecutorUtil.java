@@ -552,15 +552,12 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         try {
             log.info("开始查找任务ID为 {} 的所有相关进程", taskId);
             
-            // 先列出所有Python进程用于调试
-            listAllPythonProcessesWindows();
-            
             // 第一步：查找直接包含任务ID的Python进程
             Set<Long> pythonPids = new HashSet<>();
             Set<Long> allRelatedPids = new HashSet<>();
             
             // 使用wmic命令获取所有Python进程的详细信息，包括命令行参数
-            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", "name='python.exe'", "get", "Node,ProcessId,CommandLine", "/format:csv");
+            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine", "/format:csv");
             Process wmicProcess = wmicBuilder.start();
             
             try (BufferedReader reader = new BufferedReader(
@@ -665,75 +662,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         return fields.toArray(new String[0]);
     }
     
-    /**
-     * 列出Windows系统上所有正在运行的Python进程及其命令行参数
-     */
-    public static void listAllPythonProcessesWindows() {
-        try {
-            log.info("开始查找Windows系统上所有正在运行的Python进程...");
-            
-            // 使用wmic命令获取更详细的进程信息，包括命令行参数
-            ProcessBuilder wmicBuilder = new ProcessBuilder("wmic", "process", "where", "name='python.exe'", "get", "ProcessId,CommandLine", "/format:csv");
-            Process wmicProcess = wmicBuilder.start();
-            
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(wmicProcess.getInputStream(), StandardCharsets.UTF_8))) {
-                
-                String line;
-                boolean firstLine = true;
-                int pythonProcessCount = 0;
-                
-                while ((line = reader.readLine()) != null) {
-                    // 跳过标题行
-                    if (firstLine) {
-                        firstLine = false;
-                        continue;
-                    }
-                    
-                    // 跳过空行
-                    if (line.trim().isEmpty()) {
-                        continue;
-                    }
-                    
-                    // 解析CSV格式的进程信息：Node,CommandLine,ProcessId
-                    // 由于CommandLine可能包含逗号，需要特殊处理
-                    String[] parts = parseWmicCsvLine(line);
-                    if (parts.length >= 3) {
-                        String node = parts[0].trim();
-                        String commandLine = parts[1].trim();
-                        String processId = parts[2].trim();
-                        
-                        try {
-                            long pid = Long.parseLong(processId);
-                            pythonProcessCount++;
-                            
-                            log.info("Python进程 #{} - PID: {}, 命令行: {}", 
-                                   pythonProcessCount, processId, commandLine);
-                            
-                        } catch (NumberFormatException e) {
-                            log.warn("无法解析进程ID: {}", processId);
-                        }
-                    }
-                }
-                
-                if (pythonProcessCount == 0) {
-                    log.info("未找到任何正在运行的Python进程");
-                } else {
-                    log.info("总共找到 {} 个Python进程", pythonProcessCount);
-                }
-            }
-            
-            // 设置较短的超时时间，因为wmic命令通常很快完成
-            boolean completed = wmicProcess.waitFor(3, TimeUnit.SECONDS);
-            if (!completed) {
-                log.warn("wmic命令执行超时，强制终止进程");
-                wmicProcess.destroyForcibly();
-            }
-            
-        } catch (Exception e) {
-            log.error("在Windows系统上查找Python进程失败: {}", e.getMessage());
-        }
-    }
+
     
     /**
      * 在Unix系统上根据任务ID终止Python进程
