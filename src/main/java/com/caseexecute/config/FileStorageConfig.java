@@ -39,4 +39,17 @@ public class FileStorageConfig {
      * 单个任务最大文件大小（MB）
      */
     private long maxFileSizeMB = 1000;
+    
+    /**
+     * 打印配置信息（用于调试）
+     */
+    public void printConfig() {
+        System.out.println("=== FileStorageConfig 配置信息 ===");
+        System.out.println("rootDirectory: " + rootDirectory);
+        System.out.println("autoCleanup: " + autoCleanup);
+        System.out.println("retentionHours: " + retentionHours);
+        System.out.println("maxConcurrentTasks: " + maxConcurrentTasks);
+        System.out.println("maxFileSizeMB: " + maxFileSizeMB);
+        System.out.println("==================================");
+    }
 }

@@ -9,7 +9,10 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
@@ -27,13 +30,28 @@ import java.util.zip.ZipInputStream;
  */
 @Slf4j
 @Component
-public class FileDownloadUtil {
+public class FileDownloadUtil implements ApplicationContextAware {
     
+    private static ApplicationContext applicationContext;
     private static FileStorageConfig fileStorageConfig;
     
-    @Autowired
-    public void setFileStorageConfig(FileStorageConfig config) {
-        FileDownloadUtil.fileStorageConfig = config;
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+        FileDownloadUtil.applicationContext = applicationContext;
+        // 从ApplicationContext中获取FileStorageConfig
+        FileDownloadUtil.fileStorageConfig = applicationContext.getBean(FileStorageConfig.class);
+        log.info("FileStorageConfig注入成功 - 根目录: {}", fileStorageConfig.getRootDirectory());
+    }
+    
+    /**
+     * 获取FileStorageConfig实例
+     */
+    private static FileStorageConfig getFileStorageConfig() {
+        if (fileStorageConfig == null && applicationContext != null) {
+            fileStorageConfig = applicationContext.getBean(FileStorageConfig.class);
+            log.info("重新获取FileStorageConfig - 根目录: {}", fileStorageConfig.getRootDirectory());
+        }
+        return fileStorageConfig;
     }
     
     /**
@@ -47,8 +65,8 @@ public class FileDownloadUtil {
     public static Path downloadFile(String url, String taskId) throws Exception {
         log.info("开始下载文件 - URL: {}, 任务ID: {}", url, taskId);
         
-        // 获取配置的根目 todo 
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
+        // 获取配置的根目录
+        String rootDir = getFileStorageConfig() != null ? getFileStorageConfig().getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         
@@ -140,7 +158,7 @@ public class FileDownloadUtil {
         log.info("开始解压ZIP文件到临时目录 - 路径: {}, 任务ID: {}", zipFilePath, taskId);
         
         // 获取配置的根目录
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
+        String rootDir = getFileStorageConfig() != null ? getFileStorageConfig().getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         
@@ -251,7 +269,7 @@ public class FileDownloadUtil {
      */
     public static void cleanupTaskDirectory(String taskId) {
         try {
-            String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
+            String rootDir = getFileStorageConfig() != null ? getFileStorageConfig().getRootDirectory() : System.getProperty("java.io.tmpdir");
             Path taskDir = Paths.get(rootDir).resolve(taskId);
             if (Files.exists(taskDir)) {
                 FileUtils.deleteDirectory(taskDir.toFile());

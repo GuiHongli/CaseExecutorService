@@ -1,7 +1,9 @@
 package com.caseexecute;
 
+import com.caseexecute.config.FileStorageConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * 用例执行服务启动类
@@ -10,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @since 2024-01-01
  */
 @SpringBootApplication
+@EnableConfigurationProperties({FileStorageConfig.class})
 public class CaseExecuteServiceApplication {
 
     public static void main(String[] args) {
