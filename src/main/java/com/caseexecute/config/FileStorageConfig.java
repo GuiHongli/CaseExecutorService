@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
  * @since 2024-01-01
  */
 @Data
-@Component
 @ConfigurationProperties(prefix = "case-execution.file-storage")
 public class FileStorageConfig {
     

@@ -46,6 +46,20 @@ public class PythonExecutorUtil implements ApplicationContextAware {
     @Override
     public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
         PythonExecutorUtil.applicationContext = applicationContext;
+        // 从ApplicationContext中获取FileStorageConfig
+        PythonExecutorUtil.fileStorageConfig = applicationContext.getBean(FileStorageConfig.class);
+        log.info("PythonExecutorUtil - FileStorageConfig注入成功 - 根目录: {}", fileStorageConfig.getRootDirectory());
+    }
+    
+    /**
+     * 获取FileStorageConfig实例
+     */
+    private static FileStorageConfig getFileStorageConfig() {
+        if (fileStorageConfig == null && applicationContext != null) {
+            fileStorageConfig = applicationContext.getBean(FileStorageConfig.class);
+            log.info("PythonExecutorUtil - 重新获取FileStorageConfig - 根目录: {}", fileStorageConfig.getRootDirectory());
+        }
+        return fileStorageConfig;
     }
     
     /**
@@ -95,7 +109,7 @@ public class PythonExecutorUtil implements ApplicationContextAware {
         }
         
         // 创建日志目录 - 使用临时目录或配置的目录
-        String rootDir = fileStorageConfig != null ? fileStorageConfig.getRootDirectory() : System.getProperty("java.io.tmpdir");
+        String rootDir = getFileStorageConfig() != null ? getFileStorageConfig().getRootDirectory() : System.getProperty("java.io.tmpdir");
         Path rootDirectory = Paths.get(rootDir);
         Path taskDir = rootDirectory.resolve(taskId);
         Path logsDir = taskDir.resolve("logs");
